@@ -5,6 +5,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import com.mikepenz.iconics.IconicsDrawable
 import com.mikepenz.iconics.typeface.library.community.material.CommunityMaterial
 import com.mikepenz.iconics.utils.colorRes
@@ -26,6 +27,9 @@ class PostNotifications(val app: App, nList: List<AppNotification>) {
     }
 
     private val quiet by lazy { shouldBeQuiet() }
+    private val channel by lazy { channelFor(nList) }
+    // Quiet hours, on a channel that cannot be quiet itself: silence this instance instead.
+    private val silent get() = quiet && !channel.quiet
     fun shouldBeQuiet(): Boolean {
         if (!app.config.sync.quietHoursEnabled)
             return false
@@ -39,6 +43,29 @@ class PostNotifications(val app: App, nList: List<AppNotification>) {
         return now in start..end || now+240000 in start..end
     }
 
+    /**
+     * The one place a batch's channel is chosen. The builders, the group key, the summary's id and
+     * its tap target all derive from it, so the summary - the notification that actually alerts -
+     * can never sit on a different channel from the notifications it summarises.
+     *
+     * An update keeps the Updates channel in quiet hours too, because blocking "Aktualizacje" in
+     * system settings must stop it at any hour; [silent] mutes it instead. UpdateManager posts an
+     * UPDATE alone, so no mixed batch occurs; one would post as data, so that an Updates block can
+     * never hide data.
+     */
+    private fun channelFor(notifications: List<AppNotification>) = when {
+        notifications.all { it.type == NotificationType.UPDATE } -> app.notificationChannelsManager.updates
+        quiet && !dataBlocked -> app.notificationChannelsManager.dataQuiet
+        else -> app.notificationChannelsManager.data
+    }
+
+    // Blocking DATA is how the user switches the e-diary off. DATA_QUIET is only its night-time
+    // form, which nobody had a reason to block, so quiet hours must not reopen what DATA closed.
+    private val dataBlocked get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+        NotificationManagerCompat.from(app)
+            .getNotificationChannel(app.notificationChannelsManager.data.key)
+            ?.importance == NotificationManagerCompat.IMPORTANCE_NONE
+
     private fun NotificationCompat.Builder.addDefaults(): NotificationCompat.Builder {
         return this.setColor(0xff2196f3.toInt())
                 .setLights(0xff2196f3.toInt(), 2000, 2000)
@@ -51,7 +78,8 @@ class PostNotifications(val app: App, nList: List<AppNotification>) {
                     else
                         it.setDefaults(NotificationCompat.DEFAULT_ALL)
                 }
-                .setGroup(if (quiet) app.notificationChannelsManager.dataQuiet.key else app.notificationChannelsManager.data.key)
+                .setGroup(channel.key)
+                .setSilent(silent)
     }
 
     private fun buildSummaryText(summaryCounts: Map<NotificationType, Int>): CharSequence {
@@ -79,7 +107,7 @@ class PostNotifications(val app: App, nList: List<AppNotification>) {
                 MainActivity::class.java,
                 "fragmentId" to NavTarget.NOTIFICATIONS.id
         )
-        val summaryIntent = PendingIntent.getActivity(app, app.notificationChannelsManager.data.id, intent, PendingIntent.FLAG_ONE_SHOT or pendingIntentFlag())
+        val summaryIntent = PendingIntent.getActivity(app, channel.id, intent, PendingIntent.FLAG_ONE_SHOT or pendingIntentFlag())
 
         // On Nougat or newer - show maximum 8 notifications
         // On Marshmallow or older - show maximum 4 notifications
@@ -95,7 +123,7 @@ class PostNotifications(val app: App, nList: List<AppNotification>) {
             }
 
             // Create a summary to show *instead* of notifications
-            val combined = NotificationCompat.Builder(app, app.notificationChannelsManager.data.key)
+            val combined = NotificationCompat.Builder(app, channel.key)
                     .setContentTitle(app.getString(R.string.app_name))
                     .setContentText(buildSummaryText(summaryCounts))
                     .setTicker(newNotificationsText)
@@ -128,7 +156,7 @@ class PostNotifications(val app: App, nList: List<AppNotification>) {
             // Less than 8 notifications
             val notifications = nList.map {
                 summaryCounts[it.type] = summaryCounts.getOrDefault(it.type, 0) + 1
-                NotificationCompat.Builder(app, app.notificationChannelsManager.data.key)
+                NotificationCompat.Builder(app, channel.key)
                         .setContentTitle(it.profileName ?: app.getString(R.string.app_name))
                         .setContentText(it.text)
                         .setSubText(if (it.type == NotificationType.SERVER_MESSAGE) null else it.title)
@@ -155,7 +183,7 @@ class PostNotifications(val app: App, nList: List<AppNotification>) {
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                val summary = NotificationCompat.Builder(app, app.notificationChannelsManager.data.key)
+                val summary = NotificationCompat.Builder(app, channel.key)
                         .setContentTitle(newNotificationsText)
                         .setContentText(buildSummaryText(summaryCounts))
                         .setTicker(newNotificationsText)
@@ -170,7 +198,7 @@ class PostNotifications(val app: App, nList: List<AppNotification>) {
                         .setAutoCancel(true)
                         .build()
 
-                notificationManager.notify(app.notificationChannelsManager.data.id, summary)
+                notificationManager.notify(channel.id, summary)
             }
         }
     }}
