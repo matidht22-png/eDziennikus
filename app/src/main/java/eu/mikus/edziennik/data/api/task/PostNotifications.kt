@@ -163,7 +163,6 @@ class PostNotifications(val app: App, nList: List<AppNotification>) {
                         }.toBitmap())
                         .setStyle(NotificationCompat.BigTextStyle()
                                 .bigText(it.textLong ?: it.text))
-                        .setWhen(it.addedDate)
                         .addDefaults()
                         .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY)
                         .setContentIntent(it.getPendingIntent(app))
