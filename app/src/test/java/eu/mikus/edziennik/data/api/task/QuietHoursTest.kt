@@ -58,4 +58,18 @@ class QuietHoursTest {
         assertFalse(quietAt(16, 0, 1, start, end))
         assertFalse(quietAt(23, 0, 0, start, end))
     }
+
+    /**
+     * A window whose start equals its end is one second long, not all day: `start > end` is false,
+     * so it does not wrap. A `>=` there would make `rangeEnd` `start + 240000` and put every
+     * possible `now` inside the window. Equal bounds are reachable from the settings time pickers.
+     */
+    @Test
+    fun `a window whose start equals its end is quiet for that one second only`() {
+        val bound = Time(13, 0, 0).value
+        assertTrue(quietAt(13, 0, 0, bound, bound))
+        assertFalse(quietAt(13, 0, 1, bound, bound))
+        assertFalse(quietAt(12, 59, 59, bound, bound))
+        assertFalse(quietAt(3, 0, 0, bound, bound))
+    }
 }

@@ -149,7 +149,7 @@ class PostNotifications(val app: App, nList: List<AppNotification>) {
             notificationManager.notify(System.currentTimeMillis().toInt(), combined)
         }
         else {
-            // Less than 8 notifications
+            // Eight or fewer from N, four or fewer below it - posted individually.
 
             // Exactly one notification in a batch alerts and the rest defer to it. From N that is
             // the group summary posted below. Below N none is posted, and androidx strips sound
@@ -224,8 +224,9 @@ class PostNotifications(val app: App, nList: List<AppNotification>) {
  * with a day added - the branch the default 22:30-06:30 window takes.
  *
  * It takes the time of day rather than reading [Time.getNow] so that a test can state one. The
- * obstacle was never visibility: `shouldBeQuiet` is already public, but reaching it means running a
- * constructor that posts notifications.
+ * obstacle was never visibility - `shouldBeQuiet` is already public - but that calling it means
+ * constructing the whole class with an `App`, and that the clock it reads is a static `Calendar`
+ * call which Robolectric cannot move. That last point was probed, not assumed.
  *
  * The second half of the return is dead when the window does not wrap - `now + 240000` is always
  * past `end` there - and is kept exactly as it was, because this is existing behaviour being
