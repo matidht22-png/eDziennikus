@@ -155,7 +155,7 @@ class PostNotifications(val app: App, nList: List<AppNotification>) {
                 NotificationCompat.Builder(app, channel.key)
                         .setContentTitle(it.profileName ?: app.getString(R.string.app_name))
                         .setContentText(it.text)
-                        .setSubText(if (it.type == NotificationType.SERVER_MESSAGE) null else it.title)
+                        .setSubText(it.title)
                         .setTicker("${it.profileName}: ${it.title}")
                         .setSmallIcon(R.drawable.ic_notification)
                         .setLargeIcon(IconicsDrawable(app, it.type.icon).apply {
