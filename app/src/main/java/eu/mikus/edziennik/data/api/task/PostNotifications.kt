@@ -150,22 +150,41 @@ class PostNotifications(val app: App, nList: List<AppNotification>) {
         }
         else {
             // Less than 8 notifications
-            val notifications = nList.map {
-                summaryCounts[it.type] = summaryCounts.getOrDefault(it.type, 0) + 1
+
+            // Exactly one notification in a batch alerts and the rest defer to it. From N that is
+            // the group summary posted below. Below N none is posted, and androidx strips sound
+            // and vibration from any grouped child carrying GROUP_ALERT_SUMMARY - so there the
+            // first child must carry the alert, or a batch of four or fewer makes no sound at all.
+            // The children's alert behaviour and the summary's guard both read this one value: if
+            // they ever disagreed the result would be either that silence or a double alert.
+            val hasSummary = Build.VERSION.SDK_INT >= Build.VERSION_CODES.N
+            @NotificationCompat.GroupAlertBehavior
+            fun alertBehaviourFor(index: Int) =
+                if (hasSummary || index != 0) NotificationCompat.GROUP_ALERT_SUMMARY
+                else NotificationCompat.GROUP_ALERT_ALL
+
+            val notifications = nList.mapIndexed { index, item ->
+                summaryCounts[item.type] = summaryCounts.getOrDefault(item.type, 0) + 1
                 NotificationCompat.Builder(app, channel.key)
-                        .setContentTitle(it.profileName ?: app.getString(R.string.app_name))
-                        .setContentText(it.text)
-                        .setSubText(it.title)
-                        .setTicker("${it.profileName}: ${it.title}")
+                        .setContentTitle(item.profileName ?: app.getString(R.string.app_name))
+                        .setContentText(item.text)
+                        .setSubText(item.title)
+                        .setTicker("${item.profileName}: ${item.title}")
                         .setSmallIcon(R.drawable.ic_notification)
-                        .setLargeIcon(IconicsDrawable(app, it.type.icon).apply {
+                        .setLargeIcon(IconicsDrawable(app, item.type.icon).apply {
                             colorRes = R.color.colorPrimary
                         }.toBitmap())
                         .setStyle(NotificationCompat.BigTextStyle()
-                                .bigText(it.textLong ?: it.text))
+                                .bigText(item.textLong ?: item.text))
+                        // addDefaults calls setSilent, which only writes a field that
+                        // NotificationCompatBuilder's constructor consumes at build() time,
+                        // overwriting whatever group alert behaviour is set below. The call order
+                        // reads as though the later one wins; it does not. During quiet hours on a
+                        // channel that is not itself quiet, the setGroupAlertBehavior call below is
+                        // therefore discarded, which is the behaviour we want.
                         .addDefaults()
-                        .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_SUMMARY)
-                        .setContentIntent(it.getPendingIntent(app))
+                        .setGroupAlertBehavior(alertBehaviourFor(index))
+                        .setContentIntent(item.getPendingIntent(app))
                         .setAutoCancel(true)
                         .build()
             }
@@ -177,7 +196,7 @@ class PostNotifications(val app: App, nList: List<AppNotification>) {
                 }
             }
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            if (hasSummary) {
                 val summary = NotificationCompat.Builder(app, channel.key)
                         .setContentTitle(newNotificationsText)
                         .setContentText(buildSummaryText(summaryCounts))
