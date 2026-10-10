@@ -35,12 +35,8 @@ class PostNotifications(val app: App, nList: List<AppNotification>) {
             return false
         val now = Time.getNow().value
         val start = app.config.sync.quietHoursStart?.value ?: return false
-        var end = app.config.sync.quietHoursEnd?.value ?: return false
-        if (start > end) {
-            // the range spans between two days
-            end += 240000
-        }
-        return now in start..end || now+240000 in start..end
+        val end = app.config.sync.quietHoursEnd?.value ?: return false
+        return quietHoursContain(now, start, end)
     }
 
     /**
@@ -202,4 +198,23 @@ class PostNotifications(val app: App, nList: List<AppNotification>) {
             }
         }
     }}
+}
+
+/**
+ * Whether [now] falls inside the quiet-hours window [start]..[end], each a [Time] value
+ * (`hhmmss`). A window whose start is after its end spans midnight, so the comparison is retried
+ * with a day added - the branch the default 22:30-06:30 window takes.
+ *
+ * It takes the time of day rather than reading [Time.getNow] so that a test can state one. The
+ * obstacle was never visibility: `shouldBeQuiet` is already public, but reaching it means running a
+ * constructor that posts notifications.
+ *
+ * The second half of the return is dead when the window does not wrap - `now + 240000` is always
+ * past `end` there - and is kept exactly as it was, because this is existing behaviour being
+ * characterised, not rewritten.
+ */
+internal fun quietHoursContain(now: Int, start: Int, end: Int): Boolean {
+    // the range spans between two days
+    val rangeEnd = if (start > end) end + 240000 else end
+    return now in start..rangeEnd || now + 240000 in start..rangeEnd
 }

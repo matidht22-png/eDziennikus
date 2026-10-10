@@ -111,6 +111,26 @@ class PostNotificationsChannelTest {
         assertEquals(NotificationCompat.GROUP_ALERT_ALL, summary.groupAlertBehavior)
     }
 
+    /**
+     * The default 22:30-06:30 window crosses midnight, so `shouldBeQuiet` takes its wrapping
+     * branch. 00:00:01-00:00:00 wraps too and contains every possible [Time] value, so it reaches
+     * that branch without a clock seam.
+     *
+     * This pins the wiring, not the arithmetic: the window is true for every `now`, so on its own
+     * it could not tell the wrapping branch apart from `return true`. `QuietHoursTest` walks the
+     * boundaries.
+     */
+    @Test fun `a window that crosses midnight still routes the batch to the quiet channel`() {
+        app.config.sync.quietHoursEnabled = true
+        app.config.sync.quietHoursStart = Time(0, 0, 1)
+        app.config.sync.quietHoursEnd = Time(0, 0, 0)
+        PostNotifications(app, grades(2))
+
+        summaryOf(channels.dataQuiet)
+        assertEquals(2, children.size)
+        assertEverythingOn(channels.dataQuiet)
+    }
+
     @Test fun `in quiet hours a combined batch posts on the quiet channel`() {
         quietHours(on = true)
         PostNotifications(app, grades(9))
