@@ -26,6 +26,9 @@ interface NoteDao {
     @Query("DELETE FROM notes WHERE profileId = :profileId AND noteId = :noteId")
     fun remove(profileId: Int, noteId: Long)
 
+    @Query("DELETE FROM notes WHERE profileId = :profileId")
+    fun clear(profileId: Int)
+
     @Query("SELECT * FROM notes WHERE profileId = :profileId AND noteId = :noteId $ORDER_BY")
     fun get(profileId: Int, noteId: Long): LiveData<Note?>
 
