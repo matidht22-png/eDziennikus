@@ -4,7 +4,8 @@
 package eu.mikus.edziennik.data.db
 
 /**
- * Deletes every row owned by [profileId].
+ * Deletes the content rows owned by [profileId]. `config` rows belong to the profile too, but
+ * [removeProfileData] retires them separately, below the keep-profile guard.
  *
  * Profile ids are reused - [eu.mikus.edziennik.data.db.dao.ProfileDao.lastId] is a MAX over the
  * surviving profiles, not a counter - so a profile-scoped table left out of here does not merely
