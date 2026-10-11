@@ -33,6 +33,9 @@ data class Notification(
         val profileId: Int?,
         val profileName: String?,
 
+        // Always true: rows are only inserted with this default and nothing re-posts them -
+        // SzkolnyTask marks metadata notified before posting, so each notification is shown
+        // once, as it is created. Kept because WidgetNotificationsFactory reads it by name.
         var posted: Boolean = true,
 
         @ColumnInfo(name = "viewId")

@@ -29,15 +29,6 @@ interface NotificationDao {
     @Query("SELECT * FROM notifications ORDER BY addedDate DESC")
     fun getAll(): LiveData<List<Notification>>
 
-    @Query("SELECT * FROM notifications")
-    fun getAllNow(): List<Notification>
-
-    @Query("SELECT * FROM notifications WHERE posted = 0 ORDER BY addedDate DESC")
-    fun getNotPostedNow(): List<Notification>
-
-    @Query("UPDATE notifications SET posted = 1 WHERE posted = 0")
-    fun setAllPosted()
-
     @Query("SELECT * FROM notifications ORDER BY addedDate DESC")
     fun getAllCursor(): Cursor
 }
