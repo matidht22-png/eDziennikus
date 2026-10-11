@@ -17,7 +17,7 @@ class ProfileRemoveDialog(
     activity: AppCompatActivity,
     val profileId: Int,
     val profileName: String,
-    val noProfileRemoval: Boolean = false,
+    val keepProfile: Boolean = false,
     val onRemove: (() -> Unit)? = null,
     onShowListener: ((tag: String) -> Unit)? = null,
     onDismissListener: ((tag: String) -> Unit)? = null,
@@ -40,7 +40,7 @@ class ProfileRemoveDialog(
 
     override suspend fun onPositiveClick(): Boolean {
         withContext(Dispatchers.Default) {
-            if (removeProfileData(app.db, profileId, noProfileRemoval) && App.profileId == profileId)
+            if (removeProfileData(app.db, profileId, keepProfile) && App.profileId == profileId)
                 app.profileLoadLast { }
         }
 

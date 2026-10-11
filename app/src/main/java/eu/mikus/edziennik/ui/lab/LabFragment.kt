@@ -108,9 +108,9 @@ class LabFragment : Fragment() {
             is LabEffect.OpenEditor -> showEditor(effect)
             LabEffect.RestartRequired -> restartDialog()
             LabEffect.OpenChucker -> startActivity(Chucker.getLaunchIntent(activity, SCREEN_HTTP))
-            // The dialog is the confirm; it clears 23 tables plus the metadata rows itself, before
-            // its own `if (noProfileRemoval)` guard. noProfileRemoval = true is load-bearing -
-            // dropping it deletes the profile instead of clearing it.
+            // The dialog is the confirm; it delegates to removeProfileData, which clears 24 tables
+            // plus the metadata rows before its `if (keepProfile)` guard. keepProfile = true is
+            // load-bearing - dropping it deletes the profile instead of clearing it.
             //
             // The id and the name arrive on the effect, so this host reads neither off App. Design D7
             // is exactly "pass the real profile name" - LabPageFragment.kt@53a07964:93 passed the literal
@@ -120,7 +120,7 @@ class LabFragment : Fragment() {
                 activity,
                 effect.profileId,
                 effect.profileName,
-                noProfileRemoval = true,
+                keepProfile = true,
                 onRemove = { viewModel.onProfileCleared() },
             ).show()
             LabEffect.ConfirmDisableDevMode -> confirmDisableDevMode()
