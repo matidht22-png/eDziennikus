@@ -7,6 +7,24 @@ package eu.mikus.edziennik.ui.widgets;
 import com.google.gson.annotations.SerializedName;
 
 public class WidgetConfig {
+    /**
+     * Written into {@link #profileId} by {@code Config.removeProfile} when the profile a widget was
+     * bound to is removed, so the widget stops resolving to a profile at all.
+     *
+     * Deliberately NOT -1. That value means "all profiles" to the timetable widget and is what every
+     * notifications widget already stores, because WidgetConfigActivity never asks a notifications
+     * widget to pick a profile. Unbinding to -1 would turn a one-child timetable widget into an
+     * all-children one -- showing the next child to take the removed id, which is the defect this
+     * exists to stop.
+     *
+     * -2 can never name a real profile: ProfileDao.lastId selects WHERE profileId &gt; 0, and both
+     * LoginViewModel and ProfileArchiver mint MAX + 1, so every real id is at least 1. The providers
+     * therefore fall into the state they already have for a profile that does not exist -- the
+     * timetable widget prints widget_timetable_profile_doesnt_exist, which tells the user to remove
+     * the widget and add it again.
+     */
+    public static final int PROFILE_REMOVED = -2;
+
     public int profileId = -1;
     public boolean bigStyle = false;
     public boolean darkTheme = false;

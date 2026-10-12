@@ -11,6 +11,8 @@ import eu.mikus.edziennik.config.utils.*
 import eu.mikus.edziennik.data.api.models.PendingUserAction
 import eu.mikus.edziennik.data.api.models.Update
 import eu.mikus.edziennik.data.db.AppDb
+import eu.mikus.edziennik.ext.getInt
+import eu.mikus.edziennik.ui.widgets.WidgetConfig
 import java.util.concurrent.ConcurrentHashMap
 
 @Suppress("RemoveExplicitTypeArguments")
@@ -80,7 +82,8 @@ class Config(db: AppDb) : BaseConfig(db) {
     }
 
     /**
-     * Retires [profileId]'s settings: deletes the stored rows **and** drops the in-memory copy.
+     * Retires [profileId] from config: deletes the stored rows, drops the in-memory copy, and
+     * unbinds every widget pointed at it - see [unbindWidgets].
      *
      * Both halves are needed and this is the only place that does both. Profile ids are reused -
      * `ProfileDao.lastId` is a MAX over the survivors, not a counter - so clearing only the table
@@ -92,7 +95,8 @@ class Config(db: AppDb) : BaseConfig(db) {
      *
      * Pass a real profile id. Nothing here guards the argument, and `removeProfile(-1)` would
      * delete every global setting while the live global [Config] went on serving them from memory
-     * until the process restarted.
+     * until the process restarted - and would now also re-point every unified-timetable and every
+     * notifications widget, both of which store `-1`.
      *
      * **Deleting before evicting narrows a race; it does not close one.** A [get] that misses the
      * cache holds nothing while it reads the rows, so one that read them *before* the `clear` can
@@ -118,6 +122,52 @@ class Config(db: AppDb) : BaseConfig(db) {
         profileConfigs[profileId]?.retire()
         db.configDao().clear(profileId)
         profileConfigs.remove(profileId)
+        unbindWidgets(profileId)
+    }
+
+    /**
+     * Points every widget bound to [profileId] at [WidgetConfig.PROFILE_REMOVED], so it stops
+     * resolving to a profile at all.
+     *
+     * [widgetConfigs] is a **global** value keyed by `appWidgetId` whose entries each carry their
+     * own `profileId`, so nothing that sweeps profile-scoped *tables* can see it - and ids are
+     * reused, so a widget set up for a removed child would otherwise render the next child's name,
+     * lessons or lucky number under it.
+     *
+     * The entry is re-pointed, not removed. Removing it makes each provider's `?: continue` /
+     * `?: return@forEach` fire, `updateAppWidget` is then never called, and the launcher goes on
+     * showing the last frame it was handed - the removed child's data - indefinitely. It would also
+     * discard the user's style, which a placed widget can never be asked for again, because
+     * `android:configure` runs at placement only. Re-pointed, the providers reach the "profile does
+     * not exist" state they already render.
+     *
+     * The member is edited in place rather than round-tripped through [WidgetConfig]: a round-trip
+     * would drop the stale `"opacity"` key and rewrite every absent key to its declared default,
+     * which is exactly what turns an already-placed widget translucent. Entries that do not match
+     * are left untouched, which is also what keeps `-1` - all profiles, and every notifications
+     * widget - out of this. A member whose value is not an object (a string, a `null`) is skipped
+     * rather than cast: the `as` is this function's own, and a `ClassCastException` here would take
+     * the removal down. Other shapes a hand-edit in LAB could leave behind, such as a non-numeric
+     * `profileId`, are not guarded.
+     *
+     * Runs last in [removeProfile] on purpose: if anything above it throws, the widgets stay bound
+     * to a profile whose row has not been deleted yet, and the retry unbinds them. Unbinding first
+     * would leave them detached from a profile that still exists.
+     */
+    private fun unbindWidgets(profileId: Int) {
+        val configs = widgetConfigs
+        var changed = false
+        for ((_, element) in configs.entrySet()) {
+            val widget = element as? JsonObject ?: continue
+            if (widget.getInt("profileId") != profileId)
+                continue
+            widget.addProperty("profileId", WidgetConfig.PROFILE_REMOVED)
+            changed = true
+        }
+        // through the delegate setter, never config.set: ConfigDelegate caches after the first read
+        // and BaseConfig.set does not invalidate that cache, so a raw write emits a stale key
+        if (changed)
+            widgetConfigs = configs
     }
 
     /**
