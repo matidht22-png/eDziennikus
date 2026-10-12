@@ -20,6 +20,7 @@ import eu.mikus.edziennik.data.api.edziennik.EdziennikTask
 import eu.mikus.edziennik.data.api.events.UserActionRequiredEvent
 import eu.mikus.edziennik.data.api.models.PendingUserAction
 import eu.mikus.edziennik.data.api.models.pendingFor
+import eu.mikus.edziennik.data.api.task.isQuietNow
 import eu.mikus.edziennik.ext.*
 import eu.mikus.edziennik.ui.captcha.RecaptchaPromptDialog
 import eu.mikus.edziennik.ui.login.recaptcha.RecaptchaActivity
@@ -92,6 +93,19 @@ class UserActionManager(val app: App) {
                 // stops the replacement sounding - the platform only honours it on an update to an
                 // id it already holds. Change one and the other silently stops doing anything.
                 .setOnlyAlertOnce(true)
+                // Quiet hours reach this prompt the way they reach an update: per instance, not by
+                // routing it to a quiet twin of its channel. A twin is a channel nobody had a
+                // reason to block, so a night-time prompt would slip past a user who blocked
+                // "Wymagane dzialanie" deliberately. setSilent clears the sound and vibrate
+                // defaults, which is what governs below Oreo, and from Oreo supplies the group the
+                // framework needs to suppress the alert - so no setGroup call belongs beside it.
+                // What survives is the shade entry and its text, which is the whole intent: the
+                // user cannot solve a captcha asleep, but the prompt must be waiting in the
+                // morning. From API 26 the LED does not survive the silencing either - AOSP's
+                // canShowLightsLocked suppresses lights by the same grouping rule that mutes the
+                // sound - so the setLights call above reaches a modern device outside quiet hours
+                // only.
+                .setSilent(app.config.sync.isQuietNow())
                 .build()
 
         manager.notify(app.notificationChannelsManager.userAttention.id, notification)

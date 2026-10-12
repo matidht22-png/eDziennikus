@@ -6,6 +6,7 @@ package eu.mikus.edziennik.utils.managers
 import android.app.Notification
 import android.app.NotificationManager
 import android.content.Context
+import androidx.core.app.NotificationCompat
 import eu.mikus.edziennik.App
 import eu.mikus.edziennik.R
 import eu.mikus.edziennik.data.api.events.UserActionRequiredEvent
@@ -13,6 +14,7 @@ import eu.mikus.edziennik.ext.Bundle
 import eu.mikus.edziennik.utils.models.Time
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -182,5 +184,76 @@ class UserActionNotificationTest {
 
         assertNotNull("the prompt did not return after being dismissed", prompt)
         assertEquals(1, posted.size)
+    }
+
+    /**
+     * The captcha cannot be solved asleep, and the prompt sets setAutoCancel(true) and nothing else
+     * cancels it, so it is waiting in the morning either way. Keep the visual, drop the alert.
+     *
+     * What actually mutes it at API 26+ is the group: the framework suppresses an alert for a group
+     * child whose behaviour is GROUP_ALERT_SUMMARY, and that branch is gated on the notification
+     * being in a group at all. `setSilent` supplies one itself when the caller has none - which is
+     * why no setGroup call accompanies it, and why this asserts the group is non-null rather than
+     * asserting the key androidx happens to use for it.
+     */
+    @Test fun `in quiet hours the prompt is posted silenced`() {
+        quietHours(on = true)
+        sendToUser()
+
+        val notification = prompt
+        assertNotNull("quiet hours dropped the prompt instead of silencing it", notification)
+        assertNotNull("not in a group, so the framework cannot mute it", notification!!.group)
+        assertEquals(
+            NotificationCompat.GROUP_ALERT_SUMMARY,
+            notification.groupAlertBehavior,
+        )
+    }
+
+    /**
+     * The guard on "keep the visual". The decision allows silencing the prompt, never dropping it
+     * and never emptying it: what is waiting in the morning is the shade entry and its text, and
+     * that is what this pins. It deliberately says nothing about the LED - the grouping that mutes
+     * the sound mutes the light with it at API 26+, so the LED is not part of what survives, and
+     * Robolectric could not show a light blinking or not blinking in any case.
+     */
+    @Test fun `a silenced prompt is still posted, with its text intact`() {
+        quietHours(on = true)
+        sendToUser()
+
+        val notification = prompt
+        assertNotNull("quiet hours dropped the prompt instead of silencing it", notification)
+        assertEquals(
+            app.getString(R.string.notification_user_action_required_title),
+            notification!!.extras.getCharSequence(Notification.EXTRA_TITLE)?.toString(),
+        )
+        assertEquals(
+            app.getString(R.string.notification_user_action_required_captcha_librus, 1),
+            notification.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString(),
+        )
+    }
+
+    @Test fun `outside quiet hours the prompt alerts`() {
+        quietHours(on = false)
+        sendToUser()
+
+        val notification = prompt!!
+        assertEquals(NotificationCompat.GROUP_ALERT_ALL, notification.groupAlertBehavior)
+        assertNull(
+            "the prompt was grouped outside quiet hours, so the framework can mute it",
+            notification.group,
+        )
+    }
+
+    /**
+     * quietHoursEnabled is settable on its own and the two times default to null, so "on, with no
+     * window" is reachable. It must mean "not quiet" - and must not throw on a null Time.
+     */
+    @Test fun `quiet hours with no window set is not quiet`() {
+        app.config.sync.quietHoursEnabled = true
+        app.config.sync.quietHoursStart = null
+        app.config.sync.quietHoursEnd = null
+        sendToUser()
+
+        assertEquals(NotificationCompat.GROUP_ALERT_ALL, prompt!!.groupAlertBehavior)
     }
 }
