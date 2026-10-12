@@ -11,6 +11,7 @@ import eu.mikus.edziennik.config.utils.*
 import eu.mikus.edziennik.data.api.models.PendingUserAction
 import eu.mikus.edziennik.data.api.models.Update
 import eu.mikus.edziennik.data.db.AppDb
+import java.util.concurrent.ConcurrentHashMap
 
 @Suppress("RemoveExplicitTypeArguments")
 class Config(db: AppDb) : BaseConfig(db) {
@@ -18,7 +19,17 @@ class Config(db: AppDb) : BaseConfig(db) {
         const val DATA_VERSION = 12
     }
 
-    private val profileConfigs: HashMap<Int, ProfileConfig> = hashMapOf()
+    /**
+     * Concurrent because [removeProfile] runs off the main thread - `ProfileRemoveDialog` calls it
+     * inside `withContext(Dispatchers.Default)` - while `SzkolnyTask` is already putting into this
+     * map from a sync thread, and a concurrent structural removal is what corrupts a `HashMap`.
+     *
+     * Keep the `?:` + put in [get]; do not "finish the job" with `computeIfAbsent`. minSdk is 23,
+     * every Robolectric test here runs at sdk 35, and only `lintDebug` would report the `NewApi` -
+     * and the atomicity it buys guards a double-construct in which both instances read the same
+     * rows and one simply wins.
+     */
+    private val profileConfigs = ConcurrentHashMap<Int, ProfileConfig>()
 
     val ui by lazy { ConfigUI(this) }
     val sync by lazy { ConfigSync(this) }
@@ -59,14 +70,39 @@ class Config(db: AppDb) : BaseConfig(db) {
     }
 
     /**
-     * Retires [profileId]'s stored settings.
+     * Retires [profileId]'s settings: deletes the stored rows **and** drops the in-memory copy.
+     *
+     * Both halves are needed and this is the only place that does both. Profile ids are reused -
+     * `ProfileDao.lastId` is a MAX over the survivors, not a counter - so clearing only the table
+     * leaves the next child reading the previous child's settings until the app restarts, and
+     * clearing only memory hands them back on the next launch. Dropping the instance, rather than
+     * clearing its `values`, is what retires the per-property caches inside `ConfigDelegate`.
+     *
+     * **The order of the two statements is load-bearing.** Deleting first means a concurrent [get]
+     * in the window between them rebuilds from an already-empty table, and the remove that follows
+     * costs one needless rebuild. Evicting first means that same [get] rebuilds from rows that are
+     * still there and re-caches them - the defect this method exists to prevent, restored, with no
+     * cache entry left to blame.
      */
     fun removeProfile(profileId: Int) {
         db.configDao().clear(profileId)
+        profileConfigs.remove(profileId)
     }
 
+    /**
+     * This profile's settings, built on first use and cached for the life of the process.
+     *
+     * Reads the profile's own rows rather than reusing [entries]. That snapshot is taken once, when
+     * `App.onCreate` constructs this object, and nothing ever refreshes it - so a profile removed
+     * during this process would still be served its deleted rows from here, and profile ids are
+     * reused. Do not "optimise" this back to [entries].
+     */
     operator fun get(profileId: Int): ProfileConfig {
-        return profileConfigs[profileId] ?: ProfileConfig(db, profileId, entries).also {
+        return profileConfigs[profileId] ?: ProfileConfig(
+            db,
+            profileId,
+            db.configDao().getAllNow(profileId),
+        ).also {
             profileConfigs[profileId] = it
         }
     }
