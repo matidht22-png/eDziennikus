@@ -14,6 +14,7 @@ import kotlinx.coroutines.launch
 import eu.mikus.edziennik.config.db.ConfigEntry
 import eu.mikus.edziennik.data.db.AppDb
 import eu.mikus.edziennik.ext.takePositive
+import eu.mikus.edziennik.utils.Utils
 import kotlin.coroutines.CoroutineContext
 
 abstract class BaseConfig(
@@ -23,9 +24,23 @@ abstract class BaseConfig(
     protected var entries: List<ConfigEntry>? = null,
 ) : CoroutineScope {
 
+    companion object {
+        private const val TAG = "BaseConfig"
+    }
+
     private val job = Job()
     override val coroutineContext: CoroutineContext
         get() = job + Dispatchers.Default
+
+    /**
+     * Set once by [retireInstance] and never cleared: a retired instance stays retired.
+     *
+     * `@Volatile` because it is written on the profile-removal path - `ProfileRemoveDialog` runs
+     * `removeProfileData` inside `withContext(Dispatchers.Default)` - and read on whatever thread a
+     * screen still holding this instance happens to write from.
+     */
+    @Volatile
+    private var retired = false
 
     val values = hashMapOf<String, String?>()
 
@@ -53,7 +68,42 @@ abstract class BaseConfig(
         }
     }
 
+    /**
+     * Retires this instance for good: no further write is accepted, and anything already queued on
+     * its scope is cancelled.
+     *
+     * [ProfileConfig.retire] is the only caller, and it is declared **there** rather than here so
+     * that `retire()` on the global [Config] does not compile. Retiring the global instance would
+     * stop every app-wide setting persisting for the rest of the process, and nothing would say so.
+     *
+     * Cancelling the `Job` alone would not have been enough, and would have been a defect of its
+     * own: `launch` on a cancelled scope does not throw, so [set] would still write [values] and
+     * still emit on [changes] while only the row vanished - the user would watch the edit take and
+     * lose it on the next launch. The flag is what keeps the three effects a unit.
+     *
+     * The one thing outside that unit is [ConfigDelegate]'s own cache: its `setValue` assigns the
+     * cached value before it calls [set], so on a retired instance a write leaves [values] and the
+     * table untouched yet the property still reads back the new value. That is harmless - the
+     * profile is gone and the instance is about to be discarded - but it is not covered by the
+     * guard.
+     */
+    protected fun retireInstance() {
+        retired = true
+        job.cancel()
+    }
+
+    /**
+     * Writes [key] to [values] and [changes] now, and to the table asynchronously.
+     *
+     * A retired instance refuses the write outright rather than half-applying it; see
+     * [retireInstance]. The guard is above all three effects deliberately - below the first of them
+     * it reintroduces exactly the silent half-write it exists to prevent.
+     */
     fun set(key: String, value: String?) {
+        if (retired) {
+            Utils.d(TAG, "refusing a write to retired profile $profileId: $key")
+            return
+        }
         values[key] = value
         _changes.tryEmit(key)
         launch(Dispatchers.IO) {

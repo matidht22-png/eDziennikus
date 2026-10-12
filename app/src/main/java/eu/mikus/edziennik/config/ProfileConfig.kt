@@ -35,4 +35,15 @@ class ProfileConfig(
         if (dataVersion < DATA_VERSION)
             ProfileConfigMigration(this)
     }
+
+    /**
+     * Retires this instance. [Config.removeProfile] calls it on the way to evicting this profile,
+     * and nothing else should.
+     *
+     * After this, a write through any reference a screen still holds is refused outright rather
+     * than half-applied (map updated and flow emitted, row lost), and a write already queued on
+     * `Dispatchers.IO` is cancelled before it can re-insert a row after the `DELETE` - which is how
+     * a removed child's settings used to reach the next child to take this id.
+     */
+    internal fun retire() = retireInstance()
 }

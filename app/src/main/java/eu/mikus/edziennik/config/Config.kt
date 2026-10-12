@@ -101,12 +101,21 @@ class Config(db: AppDb) : BaseConfig(db) {
      * gap between the two statements is unsafe as well. Closing it would need [get]'s miss path and
      * this method under a shared lock.
      *
-     * One leak survives either way: [BaseConfig.set] persists in `launch(Dispatchers.IO)` and no
-     * `BaseConfig` ever cancels its `Job`, so a write in flight on an evicted instance - or a later
-     * write through one a screen still holds - can re-insert a row after the `DELETE`, and [get]
-     * will then hand it to the reused id.
+     * **Retiring before deleting is what closes the write leak.** [ProfileConfig.retire] refuses
+     * further writes through the instance *and* cancels anything already queued on its scope, so a
+     * write in flight cannot re-insert a row after the `DELETE` and be handed to the reused id by
+     * [get]. It has to come first: retired after the `clear`, the queued write lands in the gap,
+     * which is the leak itself. It does not move the eviction, so the ordering above is unaffected
+     * - a concurrent [get] in the window is simply handed the retired instance instead of a live
+     * one.
+     *
+     * Two residues remain. A write already *executing* `ConfigDao.add` cannot be interrupted -
+     * Room's generated insert is blocking, not suspending - so that window narrows to the width of
+     * one DAO call rather than closing. And the straddling [get] above installs a **fresh, live**
+     * instance that nothing retires, which is the same race under a different name.
      */
     fun removeProfile(profileId: Int) {
+        profileConfigs[profileId]?.retire()
         db.configDao().clear(profileId)
         profileConfigs.remove(profileId)
     }
