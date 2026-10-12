@@ -3,6 +3,7 @@
  */
 package eu.mikus.edziennik.data.db
 
+import eu.mikus.edziennik.config.Config
 import eu.mikus.edziennik.config.db.ConfigDao
 import eu.mikus.edziennik.data.db.dao.LoginStoreDao
 import eu.mikus.edziennik.data.db.dao.NoteDao
@@ -33,6 +34,7 @@ class ProfileDataRemovalTest {
     private val loginStoreDao = mockk<LoginStoreDao>(relaxed = true)
 
     private lateinit var db: AppDb
+    private lateinit var config: Config
 
     @BeforeTest
     fun setUp() {
@@ -44,11 +46,12 @@ class ProfileDataRemovalTest {
         every { profileDao.getByIdNow(1) } returns
             Profile(id = 1, loginStoreId = 7, loginStoreType = LoginType.LIBRUS)
         every { profileDao.getIdsByLoginStoreIdNow(7) } returns listOf(1)
+        config = Config(db)
     }
 
     @Test
     fun `clears notes even when the profile itself is kept`() {
-        val removed = removeProfileData(db, profileId = 1, keepProfile = true)
+        val removed = removeProfileData(db, config, profileId = 1, keepProfile = true)
 
         verify { noteDao.clear(1) }
         assertFalse(removed)
@@ -58,7 +61,7 @@ class ProfileDataRemovalTest {
 
     @Test
     fun `clears notes and removes the profile`() {
-        val removed = removeProfileData(db, profileId = 1, keepProfile = false)
+        val removed = removeProfileData(db, config, profileId = 1, keepProfile = false)
 
         verify { noteDao.clear(1) }
         verify { configDao.clear(1) }
@@ -71,18 +74,19 @@ class ProfileDataRemovalTest {
     fun `does nothing for an unknown profile`() {
         every { profileDao.getByIdNow(99) } returns null
 
-        val removed = removeProfileData(db, profileId = 99, keepProfile = false)
+        val removed = removeProfileData(db, config, profileId = 99, keepProfile = false)
 
         assertFalse(removed)
         verify(exactly = 0) { noteDao.clear(any()) }
         verify(exactly = 0) { profileDao.remove(any()) }
+        verify(exactly = 0) { configDao.clear(any()) }
     }
 
     @Test
     fun `keeps a login store that other profiles still use`() {
         every { profileDao.getIdsByLoginStoreIdNow(7) } returns listOf(1, 2)
 
-        removeProfileData(db, profileId = 1, keepProfile = false)
+        removeProfileData(db, config, profileId = 1, keepProfile = false)
 
         verify { profileDao.remove(1) }
         verify(exactly = 0) { loginStoreDao.remove(any()) }

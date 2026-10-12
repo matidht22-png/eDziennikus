@@ -58,6 +58,13 @@ class Config(db: AppDb) : BaseConfig(db) {
             ConfigMigration(app, this)
     }
 
+    /**
+     * Retires [profileId]'s stored settings.
+     */
+    fun removeProfile(profileId: Int) {
+        db.configDao().clear(profileId)
+    }
+
     operator fun get(profileId: Int): ProfileConfig {
         return profileConfigs[profileId] ?: ProfileConfig(db, profileId, entries).also {
             profileConfigs[profileId] = it

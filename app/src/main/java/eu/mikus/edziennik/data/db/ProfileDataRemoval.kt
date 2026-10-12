@@ -3,6 +3,8 @@
  */
 package eu.mikus.edziennik.data.db
 
+import eu.mikus.edziennik.config.Config
+
 /**
  * Deletes the content rows owned by [profileId]. `config` rows belong to the profile too, but
  * [removeProfileData] retires them separately, below the keep-profile guard.
@@ -48,11 +50,20 @@ internal fun clearProfileData(db: AppDb, profileId: Int) {
 /**
  * Clears [profileId]'s data and, unless [keepProfile], retires the profile record itself.
  *
+ * @param config the live [Config]. A profile's settings exist in the `config` table *and* in
+ *        `Config`'s in-memory cache, and [Config.removeProfile] is the one call that retires both;
+ *        reaching for `db.configDao().clear` here instead would leave the next profile to take this
+ *        id reading this one's settings until the app restarted.
  * @param keepProfile wipe the profile's data but leave the profile in place - the LAB action.
  * @return whether the profile row was removed, which is the caller's cue to reload the active
  *         profile. False both when nothing was removed and when [profileId] does not exist.
  */
-internal fun removeProfileData(db: AppDb, profileId: Int, keepProfile: Boolean): Boolean {
+internal fun removeProfileData(
+    db: AppDb,
+    config: Config,
+    profileId: Int,
+    keepProfile: Boolean,
+): Boolean {
     val profile = db.profileDao().getByIdNow(profileId) ?: return false
 
     clearProfileData(db, profileId)
@@ -60,7 +71,7 @@ internal fun removeProfileData(db: AppDb, profileId: Int, keepProfile: Boolean):
     if (keepProfile)
         return false
 
-    db.configDao().clear(profileId)
+    config.removeProfile(profileId)
 
     val profilesUsingLoginStore = db.profileDao().getIdsByLoginStoreIdNow(profile.loginStoreId)
     if (profilesUsingLoginStore.size == 1)

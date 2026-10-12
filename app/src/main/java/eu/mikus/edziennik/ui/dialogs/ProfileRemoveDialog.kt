@@ -40,7 +40,7 @@ class ProfileRemoveDialog(
 
     override suspend fun onPositiveClick(): Boolean {
         withContext(Dispatchers.Default) {
-            if (removeProfileData(app.db, profileId, keepProfile) && App.profileId == profileId)
+            if (removeProfileData(app.db, app.config, profileId, keepProfile) && App.profileId == profileId)
                 app.profileLoadLast { }
         }
 
