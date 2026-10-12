@@ -43,6 +43,20 @@ class ProfileArchiver(val app: App, val profile: Profile) {
         profile.dateYearEnd = Date(profile.studentSchoolYearStart + 1, 6, 30)
 
         val oldId = profile.id
+        // Finding #5. Config rows are keyed by profileId and are NOT re-keyed below, so the new
+        // school year would start with every per-profile setting back at its default. It cannot
+        // fire today: Profile.shouldArchive() is `return false` ("vulcan hotfix", unchanged since
+        // 2025-02-01) and EdziennikTask only builds this class behind it. Before anyone removes
+        // that `return false`, copy the rows across and drop any instance cached for the id about
+        // to be minted:
+        //     app.db.configDao().addAll(
+        //         app.db.configDao().getAllNow(oldId).map { it.copy(profileId = newId) },
+        //     )
+        //     app.config.removeProfile(newId)
+        // Copy rather than move: the archived profile keeps oldId and should keep its settings.
+        // And note that `profile.config` is a `by lazy` resolved against whatever id this object
+        // held when it was first read, so it still points at oldId's ProfileConfig after the
+        // reassignment below - re-load the profile row instead of relying on it across the re-key.
         val newId = (app.db.profileDao().lastId ?: profile.id) + 1
         profile.id = newId
         profile.subname = "Nowy rok szkolny - ${profile.studentSchoolYearStart}"
