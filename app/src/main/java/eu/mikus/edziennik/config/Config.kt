@@ -115,8 +115,13 @@ class Config(db: AppDb) : BaseConfig(db) {
      *
      * Two residues remain. A write already *executing* `ConfigDao.add` cannot be interrupted -
      * Room's generated insert is blocking, not suspending - so that window narrows to the width of
-     * one DAO call rather than closing. And the straddling [get] above installs a **fresh, live**
-     * instance that nothing retires, which is the same race under a different name.
+     * one DAO call rather than closing. And any [get] for this id that completes after the eviction
+     * installs a **fresh, live** instance that nothing retires: the straddling one above, which is
+     * a race, or any later one, which needs no concurrency at all. `Profile`'s
+     * `val config by lazy { App.config[this.id] }` resolving for the first time while `App.profile`
+     * is still the removed profile, in the window before `profileLoadLast` swaps it, is enough. A
+     * write through either instance persists a row under the removed id, which the next child to
+     * take it inherits. This is left open on purpose.
      */
     fun removeProfile(profileId: Int) {
         profileConfigs[profileId]?.retire()
@@ -153,6 +158,29 @@ class Config(db: AppDb) : BaseConfig(db) {
      * Runs last in [removeProfile] on purpose: if anything above it throws, the widgets stay bound
      * to a profile whose row has not been deleted yet, and the retry unbinds them. Unbinding first
      * would leave them detached from a profile that still exists.
+     *
+     * The same failure has a second cost, which a retry repairs only once it succeeds: if
+     * `configDao().clear` throws, `profileConfigs.remove` never runs either, so the map keeps the
+     * instance [ProfileConfig.retire] already retired - for a profile that still exists - and every
+     * settings change for that child is silently refused until a retry of the removal succeeds or
+     * the process restarts. Before retiring moved ahead of the `DELETE`, the same failure left a
+     * working instance. It takes a SQLite failure that also propagates out of
+     * `ProfileRemoveDialog`, so in practice the crash dominates; this records the cost, it does
+     * not close it.
+     *
+     * **This is the first mutation of [widgetConfigs] that is not on the main thread, and it takes
+     * no lock.** `ProfileRemoveDialog` calls [removeProfile] inside
+     * `withContext(Dispatchers.Default)`, while the three widget providers read this same
+     * [JsonObject] instance on the main thread and their `onDeleted` removes from it there. A
+     * widget broadcast landing inside the loop can race it: `onDeleted`'s `remove` against this
+     * `entrySet()` iteration, or against the `toString()` the delegate setter then runs over the
+     * whole object, makes either throw `ConcurrentModificationException` out of [removeProfile].
+     * The `addProperty` itself is not part of that: it only ever reaches an entry whose `profileId`
+     * is already present, so it replaces a value rather than inserting a key, which
+     * `LinkedTreeMap` does not count as a structural change - a provider reading that child sees
+     * either id and does not throw. The window is microseconds and the trigger is a widget update
+     * arriving during the removal tap, so it is accepted rather than closed; closing it would take
+     * a lock shared with the providers, not one here.
      */
     private fun unbindWidgets(profileId: Int) {
         val configs = widgetConfigs

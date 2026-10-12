@@ -41,9 +41,12 @@ import org.junit.jupiter.api.Test
 class ConfigRetirementTest {
 
     /**
-     * One map behind every read and every write, so a "the row came back" assertion can actually
-     * fail. Mirrors the fake in [ConfigProfileLifecycleTest] on purpose: two independent fakes for
-     * the load and the save make a round-trip unfalsifiable, and this repo has shipped one.
+     * One map behind every read and every write. The shape is still load-bearing even though no
+     * test in this file asserts on a row (see the class doc): it is what `Config.get`'s seeded
+     * per-profile read consumes, so `config[2]` is built from the row [setUp] stored, and what
+     * makes `clear` remove exactly what `getAllNow` would then return, rather than a fake whose
+     * halves can disagree. Mirrors the fake in [ConfigProfileLifecycleTest] on purpose; that file's
+     * assertions are the ones that round-trip through it.
      *
      * Every method is `@Synchronized` because this class, unlike that one, drives the real
      * `BaseConfig.set`, which persists on `launch(Dispatchers.IO)` - a real pool thread calling
