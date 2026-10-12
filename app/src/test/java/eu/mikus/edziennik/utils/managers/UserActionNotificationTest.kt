@@ -212,8 +212,9 @@ class UserActionNotificationTest {
     /**
      * The guard on "keep the visual". The decision allows silencing the prompt, never dropping it
      * and never emptying it: what is waiting in the morning is the shade entry and its text, and
-     * that is what this pins. It deliberately says nothing about the LED - the grouping that mutes
-     * the sound mutes the light with it at API 26+, so the LED is not part of what survives, and
+     * that is what this pins. It deliberately says nothing about the LED - on a modern device the
+     * grouping that mutes the sound mutes the light with it (read from AOSP android16-release;
+     * earlier API levels were not checked), so the LED is not part of what survives, and
      * Robolectric could not show a light blinking or not blinking in any case.
      */
     @Test fun `a silenced prompt is still posted, with its text intact`() {

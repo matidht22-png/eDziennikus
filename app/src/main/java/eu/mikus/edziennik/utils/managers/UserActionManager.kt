@@ -40,7 +40,11 @@ class UserActionManager(val app: App) {
 
         // One slot, last writer wins: a later park displaces an earlier profile's. The notification
         // follows the slot - `notify` below posts under the channel's own id - so the one prompt in
-        // the tray is always the one the slot holds, and no stale prompt survives to be tapped. The
+        // the tray is always the one the slot holds, and no displaced prompt survives to be tapped.
+        // That is a claim about displacement only. Nothing cancels the prompt or clears the slot
+        // except a tap, so a captcha the user solves another way - opening the app and answering
+        // the dialog, which takes the EventBus branch above and touches neither - leaves its
+        // prompt in the shade, and tapping that one asks for a second, pointless captcha. The
         // displaced profile is simply dropped; its next sync raises the action again. `pendingFor`
         // still guards the profile id, because MainActivity is exported and that check is what a
         // forged intent meets.
@@ -101,10 +105,20 @@ class UserActionManager(val app: App) {
                 // framework needs to suppress the alert - so no setGroup call belongs beside it.
                 // What survives is the shade entry and its text, which is the whole intent: the
                 // user cannot solve a captcha asleep, but the prompt must be waiting in the
-                // morning. From API 26 the LED does not survive the silencing either - AOSP's
-                // canShowLightsLocked suppresses lights by the same grouping rule that mutes the
-                // sound - so the setLights call above reaches a modern device outside quiet hours
-                // only.
+                // morning. On a modern device the LED does not survive the silencing either -
+                // AOSP's canShowLightsLocked (read from android16-release; earlier API levels were
+                // not checked) suppresses lights by the same grouping rule that mutes the sound -
+                // so the setLights call above reaches such a device outside quiet hours only.
+                //
+                // The silencing and setOnlyAlertOnce combine into a consequence that is accepted,
+                // not avoided: a prompt first raised during quiet hours is never audible at all.
+                // Once quiet hours end the next sync calls setSilent(false), but the prompt is
+                // still in the shade, so that post is an update to an id the platform already
+                // holds and FLAG_ONLY_ALERT_ONCE mutes it - as it does every sync after, for as
+                // long as the prompt sits there. "One alert per episode" therefore becomes none
+                // when the episode starts at night, which with hourly overnight syncs is the common
+                // case. The user is told visually, from the moment it was raised; that is the
+                // intent.
                 .setSilent(app.config.sync.isQuietNow())
                 .build()
 
