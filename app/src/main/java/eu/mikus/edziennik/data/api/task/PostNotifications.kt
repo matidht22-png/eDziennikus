@@ -18,7 +18,6 @@ import eu.mikus.edziennik.ext.asBoldSpannable
 import eu.mikus.edziennik.ext.concat
 import eu.mikus.edziennik.ext.pendingIntentFlag
 import eu.mikus.edziennik.ui.base.enums.NavTarget
-import eu.mikus.edziennik.utils.models.Time
 import eu.mikus.edziennik.data.db.entity.Notification as AppNotification
 
 class PostNotifications(val app: App, nList: List<AppNotification>) {
@@ -26,18 +25,10 @@ class PostNotifications(val app: App, nList: List<AppNotification>) {
         private const val TAG = "PostNotifications"
     }
 
-    private val quiet by lazy { shouldBeQuiet() }
+    private val quiet by lazy { app.config.sync.isQuietNow() }
     private val channel by lazy { channelFor(nList) }
     // Quiet hours, on a channel that cannot be quiet itself: silence this instance instead.
     private val silent get() = quiet && !channel.quiet
-    fun shouldBeQuiet(): Boolean {
-        if (!app.config.sync.quietHoursEnabled)
-            return false
-        val now = Time.getNow().value
-        val start = app.config.sync.quietHoursStart?.value ?: return false
-        val end = app.config.sync.quietHoursEnd?.value ?: return false
-        return quietHoursContain(now, start, end)
-    }
 
     /**
      * The one place a batch's channel is chosen. The builders, the group key, the summary's id and
@@ -216,24 +207,4 @@ class PostNotifications(val app: App, nList: List<AppNotification>) {
             }
         }
     }}
-}
-
-/**
- * Whether [now] falls inside the quiet-hours window [start]..[end], each a [Time] value
- * (`hhmmss`). A window whose start is after its end spans midnight, so the comparison is retried
- * with a day added - the branch the default 22:30-06:30 window takes.
- *
- * It takes the time of day rather than reading [Time.getNow] so that a test can state one. The
- * obstacle was never visibility - `shouldBeQuiet` is already public - but that calling it means
- * constructing the whole class with an `App`, and that the clock it reads is a static `Calendar`
- * call which Robolectric cannot move. That last point was probed, not assumed.
- *
- * The second half of the return is dead when the window does not wrap - `now + 240000` is always
- * past `end` there - and is kept exactly as it was, because this is existing behaviour being
- * characterised, not rewritten.
- */
-internal fun quietHoursContain(now: Int, start: Int, end: Int): Boolean {
-    // the range spans between two days
-    val rangeEnd = if (start > end) end + 240000 else end
-    return now in start..rangeEnd || now + 240000 in start..rangeEnd
 }

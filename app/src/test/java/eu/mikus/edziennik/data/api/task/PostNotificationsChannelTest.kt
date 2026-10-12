@@ -112,7 +112,7 @@ class PostNotificationsChannelTest {
     }
 
     /**
-     * The default 22:30-06:30 window crosses midnight, so `shouldBeQuiet` takes its wrapping
+     * The default 22:30-06:30 window crosses midnight, so `isQuietNow` takes its wrapping
      * branch. 00:00:01-00:00:00 wraps too and contains every possible [Time] value, so it reaches
      * that branch without a clock seam.
      *

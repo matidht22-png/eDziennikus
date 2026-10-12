@@ -15,7 +15,7 @@ import kotlin.test.assertTrue
  *
  * This needs no Android: [quietHoursContain] takes `now` as a parameter instead of reading
  * [Time.getNow], which is what makes a boundary assertable at all. `PostNotificationsChannelTest`
- * proves `shouldBeQuiet` actually routes through it.
+ * proves `isQuietNow` actually routes through it.
  */
 class QuietHoursTest {
 
