@@ -172,7 +172,7 @@ class LabFragment : Fragment() {
      * `ConfigMigration.kt:18` gates on a legacy prefs key it deletes as it runs - so it cannot fire
      * again on a migrated device, and no in-app path re-enables. One mis-tap hides LAB on that device
      * until stored state is edited from outside the app: the config row keyed `"debugMode"`
-     * (`Config.kt:38`) at `profileId = -1`, or the legacy prefs pair that replays the migration.
+     * (`Config.kt:59`) at `profileId = -1`, or the legacy prefs pair that replays the migration.
      */
     private fun confirmDisableDevMode() {
         MaterialAlertDialogBuilder(activity)
