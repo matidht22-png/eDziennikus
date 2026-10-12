@@ -37,10 +37,12 @@ class UserActionManager(val app: App) {
             return
         }
 
-        // One slot, last writer wins: a later park displaces an earlier profile's, whose tap then
-        // does nothing until that profile's next sync. `pendingFor` makes that a no-op rather than
-        // the wrong profile's captcha, which is the trade. The displaced notification is left in the
-        // tray and is inert - `notify` below uses a fresh id each time, so it is not replaced.
+        // One slot, last writer wins: a later park displaces an earlier profile's. The notification
+        // follows the slot - `notify` below posts under the channel's own id - so the one prompt in
+        // the tray is always the one the slot holds, and no stale prompt survives to be tapped. The
+        // displaced profile is simply dropped; its next sync raises the action again. `pendingFor`
+        // still guards the profile id, because MainActivity is exported and that check is what a
+        // forged intent meets.
         //
         // Bail rather than assign null: an event this cannot represent must not clear a good slot,
         // and a notification that cannot act on a tap is worse than no notification. Unreachable
@@ -84,9 +86,15 @@ class UserActionManager(val app: App) {
                 .setDefaults(NotificationCompat.DEFAULT_ALL)
                 .setContentIntent(pendingIntent)
                 .setAutoCancel(true)
+                // One parked action, one prompt, one alert. These two lines are halves of the same
+                // decision and neither works alone: notifying under the channel's own id is what
+                // replaces the previous prompt instead of stacking a new one, and the flag is what
+                // stops the replacement sounding - the platform only honours it on an update to an
+                // id it already holds. Change one and the other silently stops doing anything.
+                .setOnlyAlertOnce(true)
                 .build()
 
-        manager.notify(System.currentTimeMillis().toInt(), notification)
+        manager.notify(app.notificationChannelsManager.userAttention.id, notification)
     }
 
     class UserActionCallback(
