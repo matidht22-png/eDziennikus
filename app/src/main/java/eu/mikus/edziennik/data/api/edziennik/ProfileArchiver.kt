@@ -43,20 +43,27 @@ class ProfileArchiver(val app: App, val profile: Profile) {
         profile.dateYearEnd = Date(profile.studentSchoolYearStart + 1, 6, 30)
 
         val oldId = profile.id
-        // Finding #5. Config rows are keyed by profileId and are NOT re-keyed below, so the new
-        // school year would start with every per-profile setting back at its default. It cannot
-        // fire today: Profile.shouldArchive() is `return false` ("vulcan hotfix", unchanged since
-        // 2025-02-01) and EdziennikTask only builds this class behind it. Before anyone removes
-        // that `return false`, copy the rows across and drop any instance cached for the id about
-        // to be minted:
-        //     app.db.configDao().addAll(
-        //         app.db.configDao().getAllNow(oldId).map { it.copy(profileId = newId) },
-        //     )
-        //     app.config.removeProfile(newId)
-        // Copy rather than move: the archived profile keeps oldId and should keep its settings.
-        // And note that `profile.config` is a `by lazy` resolved against whatever id this object
-        // held when it was first read, so it still points at oldId's ProfileConfig after the
-        // reassignment below - re-load the profile row instead of relying on it across the re-key.
+        // Finding #5: config rows are keyed by profileId and are NOT re-keyed below, so the new
+        // school year would start without the settings the user had. It cannot fire today:
+        // Profile.shouldArchive() is `return false` (aeecc486, "[App] Disable profile archiver
+        // permanently", 2025-02-01), and this class has one construction site, behind that call in
+        // EdziennikTask. Removing that `return false` is what makes this live - and it also wakes
+        // SyncTrigger.kt's archiving dialog, which sits behind the same call.
+        //
+        // Do NOT write the fix as "copy the rows across, then Config.removeProfile(newId)".
+        // removeProfile DELETES that id's rows before it evicts the cache, so it would wipe the
+        // copy it was meant to protect. The id IS reused - ProfileDao.lastId is a MAX, not a
+        // counter - so it may already carry an older profile's orphaned rows and does need
+        // clearing first. The order is therefore clear, then copy, then evict, and Config exposes
+        // no eviction on its own. Give Config one method that does all three, for the same reason
+        // removeProfile exists: it is the only object holding both the table and the cache. Copy
+        // rather than move - the archived profile keeps oldId and should keep its own settings.
+        //
+        // Second trap: Profile.config is a `by lazy` bound to the id the object held when it was
+        // first read, and the line below mutates that id in place. On today's path the Profile is
+        // freshly loaded in EdziennikTask.prepare, so nothing has read it yet - but any future
+        // reader that touches profile.config before the re-key pins it to oldId for the rest of
+        // the process.
         val newId = (app.db.profileDao().lastId ?: profile.id) + 1
         profile.id = newId
         profile.subname = "Nowy rok szkolny - ${profile.studentSchoolYearStart}"
