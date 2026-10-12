@@ -20,14 +20,24 @@ class Config(db: AppDb) : BaseConfig(db) {
     }
 
     /**
+     * Built on first use and cached until [removeProfile] retires it.
+     *
      * Concurrent because [removeProfile] runs off the main thread - `ProfileRemoveDialog` calls it
      * inside `withContext(Dispatchers.Default)` - while `SzkolnyTask` is already putting into this
      * map from a sync thread, and a concurrent structural removal is what corrupts a `HashMap`.
      *
-     * Keep the `?:` + put in [get]; do not "finish the job" with `computeIfAbsent`. minSdk is 23,
-     * every Robolectric test here runs at sdk 35, and only `lintDebug` would report the `NewApi` -
-     * and the atomicity it buys guards a double-construct in which both instances read the same
-     * rows and one simply wins.
+     * It does **not** make the `?:` + put in [get] atomic, and the loser of that race is not
+     * harmless. Two threads missing on the same id both build; whoever was handed the losing
+     * instance keeps it - `Profile.config`'s lazy and the view models that capture a
+     * `ProfileConfig` all do - and the two then hold separate `values` maps and separate
+     * [ConfigDelegate] caches, so a write through one never reaches the other and the setting
+     * appears to revert. This change widens that window, because [get]'s miss path now runs a Room
+     * query where it used to filter an in-memory list.
+     *
+     * If that is ever worth closing, the call is `ConcurrentHashMap.putIfAbsent`, which is **API
+     * 1**; `computeIfAbsent` is the API 24 one. Leaving the race alone preserves the behaviour that
+     * predates this change rather than endorsing it - and note that minSdk is 23 while every
+     * Robolectric test here runs at sdk 35, so only `lintDebug` would catch a `NewApi` slip.
      */
     private val profileConfigs = ConcurrentHashMap<Int, ProfileConfig>()
 
@@ -76,13 +86,25 @@ class Config(db: AppDb) : BaseConfig(db) {
      * `ProfileDao.lastId` is a MAX over the survivors, not a counter - so clearing only the table
      * leaves the next child reading the previous child's settings until the app restarts, and
      * clearing only memory hands them back on the next launch. Dropping the instance, rather than
-     * clearing its `values`, is what retires the per-property caches inside `ConfigDelegate`.
+     * clearing its `values`, is what retires the per-property caches inside [ConfigDelegate]:
+     * those cache the *default* too when a key is absent, so an emptied `values` would change
+     * nothing.
      *
-     * **The order of the two statements is load-bearing.** Deleting first means a concurrent [get]
-     * in the window between them rebuilds from an already-empty table, and the remove that follows
-     * costs one needless rebuild. Evicting first means that same [get] rebuilds from rows that are
-     * still there and re-caches them - the defect this method exists to prevent, restored, with no
-     * cache entry left to blame.
+     * Pass a real profile id. Nothing here guards the argument, and `removeProfile(-1)` would
+     * delete every global setting while the live global [Config] went on serving them from memory
+     * until the process restarted.
+     *
+     * **Deleting before evicting narrows a race; it does not close one.** A [get] that misses the
+     * cache holds nothing while it reads the rows, so one that read them *before* the `clear` can
+     * still `put` *after* the `remove`, re-caching the removed profile's settings - and that holds
+     * under either statement order. This order is still the right one, because reversed, the whole
+     * gap between the two statements is unsafe as well. Closing it would need [get]'s miss path and
+     * this method under a shared lock.
+     *
+     * One leak survives either way: [BaseConfig.set] persists in `launch(Dispatchers.IO)` and no
+     * `BaseConfig` ever cancels its `Job`, so a write in flight on an evicted instance - or a later
+     * write through one a screen still holds - can re-insert a row after the `DELETE`, and [get]
+     * will then hand it to the reused id.
      */
     fun removeProfile(profileId: Int) {
         db.configDao().clear(profileId)
@@ -90,12 +112,17 @@ class Config(db: AppDb) : BaseConfig(db) {
     }
 
     /**
-     * This profile's settings, built on first use and cached for the life of the process.
+     * This profile's settings, built on first use and cached until [removeProfile] retires it.
      *
      * Reads the profile's own rows rather than reusing [entries]. That snapshot is taken once, when
-     * `App.onCreate` constructs this object, and nothing ever refreshes it - so a profile removed
-     * during this process would still be served its deleted rows from here, and profile ids are
-     * reused. Do not "optimise" this back to [entries].
+     * `App.onCreate` constructs this object, and nothing ever refreshes it - so before this read
+     * existed, a profile removed during the process went on being served its deleted rows from
+     * here, and profile ids are reused. Do not "optimise" this back to [entries].
+     *
+     * The cost is one `WHERE profileId = ?` read per profile per process, against the `config`
+     * table's own primary key. It runs on the main thread for `Profile.config`'s lazy and for
+     * `AgendaScreen`'s default argument, which is safe only because `AppDb` is built with
+     * `allowMainThreadQueries()`.
      */
     operator fun get(profileId: Int): ProfileConfig {
         return profileConfigs[profileId] ?: ProfileConfig(

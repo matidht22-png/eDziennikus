@@ -46,9 +46,9 @@ class ProfileArchiver(val app: App, val profile: Profile) {
         // Finding #5: config rows are keyed by profileId and are NOT re-keyed below, so the new
         // school year would start without the settings the user had. It cannot fire today:
         // Profile.shouldArchive() is `return false` (aeecc486, "[App] Disable profile archiver
-        // permanently", 2025-02-01), and this class has one construction site, behind that call in
-        // EdziennikTask. Removing that `return false` is what makes this live - and it also wakes
-        // SyncTrigger.kt's archiving dialog, which sits behind the same call.
+        // permanently, ...", 2025-02-01), and this class has one construction site, behind that
+        // call in EdziennikTask. Removing that `return false` is what makes this live - and it
+        // also wakes SyncTrigger.kt's archiving dialog, which sits behind the same call.
         //
         // Do NOT write the fix as "copy the rows across, then Config.removeProfile(newId)".
         // removeProfile DELETES that id's rows before it evicts the cache, so it would wipe the
@@ -60,10 +60,11 @@ class ProfileArchiver(val app: App, val profile: Profile) {
         // rather than move - the archived profile keeps oldId and should keep its own settings.
         //
         // Second trap: Profile.config is a `by lazy` bound to the id the object held when it was
-        // first read, and the line below mutates that id in place. On today's path the Profile is
-        // freshly loaded in EdziennikTask.prepare, so nothing has read it yet - but any future
-        // reader that touches profile.config before the re-key pins it to oldId for the rest of
-        // the process.
+        // first read, and `profile.id = newId` two lines down mutates that id in place. On today's
+        // path the Profile is freshly loaded in EdziennikTask.prepare, so nothing has read it yet -
+        // but any future reader that touches profile.config before the re-key pins that object to
+        // oldId for as long as the object lives. Re-load the profile row after the re-key rather
+        // than relying on profile.config across it.
         val newId = (app.db.profileDao().lastId ?: profile.id) + 1
         profile.id = newId
         profile.subname = "Nowy rok szkolny - ${profile.studentSchoolYearStart}"

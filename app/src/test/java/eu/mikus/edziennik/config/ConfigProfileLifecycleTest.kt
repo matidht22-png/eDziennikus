@@ -16,6 +16,7 @@ import io.mockk.mockk
 import kotlin.test.BeforeTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -25,8 +26,8 @@ import org.junit.jupiter.api.Test
  * MAX over the survivors, not a counter - so removing the highest-numbered profile guarantees the
  * next one takes its id.
  *
- * Three independent latches kept the old settings alive, and fixing any ONE of them leaves the
- * defect intact:
+ * Three latches kept the old settings alive. Fixing either of the two that can be fixed on their
+ * own leaves the defect intact:
  *  1. `Config.profileConfigs` was never evicted;
  *  2. `BaseConfig.entries` is a whole-table snapshot taken once per process, which `Config.get`
  *     handed to every `ProfileConfig` it ever built - so even a freshly built one repopulated from
@@ -98,6 +99,7 @@ class ConfigProfileLifecycleTest {
         // reading it here caches BOTH the ProfileConfig instance and the property inside its
         // ConfigDelegate, which is the state a running app is in when the parent hits Remove
         assertEquals(9, config[2].ui.homeEventsLimit)
+        assertSame(config[2], config[2])   // and the caching is what makes that state reachable
 
         removeProfileData(db, config, profileId = 2, keepProfile = false)
 
@@ -106,6 +108,7 @@ class ConfigProfileLifecycleTest {
 
     @Test
     fun `the startup snapshot does not resurrect a removed profile's rows`() {
+        assertEquals(1, configDao.getAllNow(2).size)
         // nothing has touched profile 2's config in this process, so no instance and no delegate is
         // cached: the only thing that can still serve the deleted rows is the `entries` snapshot
         removeProfileData(db, config, profileId = 2, keepProfile = false)
@@ -114,7 +117,8 @@ class ConfigProfileLifecycleTest {
     }
 
     @Test
-    fun `removal deletes the stored rows as well as the cached copy`() {
+    fun `removal deletes the stored rows`() {
+        assertEquals(1, configDao.getAllNow(2).size)
         removeProfileData(db, config, profileId = 2, keepProfile = false)
 
         assertTrue(configDao.getAllNow(2).isEmpty())
