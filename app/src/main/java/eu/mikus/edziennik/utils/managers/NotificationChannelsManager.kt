@@ -8,7 +8,6 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
-import androidx.core.app.NotificationCompat.*
 import androidx.core.app.NotificationManagerCompat.*
 import eu.mikus.edziennik.R
 
@@ -19,7 +18,6 @@ class NotificationChannelsManager(val c: Context) {
             val name: String,
             val description: String,
             val importance: Int,
-            val priority: Int,
             val quiet: Boolean = false,
             val lightColor: Int? = null
     )
@@ -64,7 +62,6 @@ class NotificationChannelsManager(val c: Context) {
                 c.getString(R.string.notification_channel_get_data_name),
                 c.getString(R.string.notification_channel_get_data_desc),
                 IMPORTANCE_MIN,
-                PRIORITY_MIN,
                 quiet = true
         )
     }
@@ -76,7 +73,6 @@ class NotificationChannelsManager(val c: Context) {
                 c.getString(R.string.notification_channel_notifications_name),
                 c.getString(R.string.notification_channel_notifications_desc),
                 IMPORTANCE_HIGH,
-                PRIORITY_MAX,
                 lightColor = 0xff2196f3.toInt()
         )
     }
@@ -88,7 +84,6 @@ class NotificationChannelsManager(val c: Context) {
                 c.getString(R.string.notification_channel_notifications_quiet_name),
                 c.getString(R.string.notification_channel_notifications_quiet_desc),
                 IMPORTANCE_LOW,
-                PRIORITY_LOW,
                 quiet = true
         )
     }
@@ -99,8 +94,7 @@ class NotificationChannelsManager(val c: Context) {
                 "eu.mikus.edziennik.UPDATES",
                 c.getString(R.string.notification_channel_updates_name),
                 c.getString(R.string.notification_channel_updates_desc),
-                IMPORTANCE_DEFAULT,
-                PRIORITY_DEFAULT
+                IMPORTANCE_DEFAULT
         )
     }
 
@@ -110,8 +104,7 @@ class NotificationChannelsManager(val c: Context) {
                 "eu.mikus.edziennik.USER_ATTENTION",
                 c.getString(R.string.notification_channel_user_attention_name),
                 c.getString(R.string.notification_channel_user_attention_desc),
-                IMPORTANCE_DEFAULT,
-                PRIORITY_DEFAULT
+                IMPORTANCE_DEFAULT
         )
     }
 
