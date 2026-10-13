@@ -298,7 +298,7 @@ class ConfigWidgetUnbindTest {
     fun `a profileId that is not a number is skipped, and a numeric string still names a profile`() {
         val fresh = configWith(
             """{"10":{"profileId":2},"17":{"profileId":"two"},"18":{"profileId":true},""" +
-                """"19":{"profileId":"2"}}"""
+                """"19":{"profileId":"2"},"20":{"profileId":null}}"""
         )
 
         fresh.removeProfile(2)
@@ -313,6 +313,9 @@ class ConfigWidgetUnbindTest {
         )
         assertEquals("two", fresh.widgetConfigs.getJsonObject("17")?.get("profileId")?.asString)
         assertEquals(true, fresh.widgetConfigs.getJsonObject("18")?.get("profileId")?.asBoolean)
+        // an explicit null parses to JsonNull, which is not a JsonPrimitive: an unsafe cast in
+        // `boundProfileId` would throw here instead of skipping the entry
+        assertTrue(fresh.widgetConfigs.getJsonObject("20")?.get("profileId")?.isJsonNull == true)
     }
 
     /** The common case: most devices have no widgets, and a removal must not create a row. */

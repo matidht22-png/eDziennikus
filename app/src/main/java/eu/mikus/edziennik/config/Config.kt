@@ -302,6 +302,19 @@ class Config(db: AppDb) : BaseConfig(db) {
      * moments of the process - placing one needs user input, so that half is practically
      * unreachable - so it is accepted rather than closed; closing it would take a lock shared with
      * the providers, not one here.
+     *
+     * "The same instance" above is not guaranteed, and that is a second outcome that throws
+     * nothing. [ConfigDelegate.getValue] is an unsynchronised check-then-set over two non-volatile
+     * fields (`DelegateConfig.kt:60-61`, `:80-101`), so a provider that races [migrate]'s first
+     * read of [widgetConfigs] can deserialise its own [JsonObject] rather than share this one.
+     * The repair then mutates and persists instance A and sets [widgetBindingsRepaired], while a
+     * provider's `onDeleted` write-back persists instance B - reverting the repair with the
+     * one-shot flag already `true`, so it is never retried. The cost is that the repair is
+     * silently skipped for that device. It is bounded: B is a clean re-read of the stored row, so
+     * the revert corrupts nothing and adds no new wrong-child render. It does not make the device
+     * safe - it is left exactly where it was before this repair existed, still exposed to the
+     * stale binding the repair is there to prevent once an id is reused. Accepted for the same
+     * reason, and closed by the same lock.
      */
     private fun unbindWidgets(profileId: Int) {
         val configs = widgetConfigs

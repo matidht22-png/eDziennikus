@@ -184,8 +184,10 @@ class ConfigWidgetRepairTest {
      * `getByIdNow` - which is what both providers call to resolve a bound widget - does not filter
      * it, so the widget still renders. `ProfileDao` declares `idsForSyncNow` two lines from
      * `idsNow` and it filters `archived = 0`; reaching for it here would unbind every archived
-     * child's widget. The fixture says only that id 3 is in the table, which is what `idsNow`
-     * reports for an archived profile.
+     * child's widget. The fixture puts ids 1 and 3 in the table, which is what `idsNow` reports
+     * for an archived profile, and the test stubs `idsForSyncNow` to `[1]` alone - so the two lists
+     * disagree on id 3, and only the one the repair reads keeps this widget bound. Neither the `1`
+     * nor the stub is noise; the comment inside the test says why the stub is there.
      */
     @Test
     fun `a widget bound to an archived profile is left alone`() {
