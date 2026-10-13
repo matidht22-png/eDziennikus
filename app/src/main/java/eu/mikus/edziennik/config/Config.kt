@@ -79,6 +79,47 @@ class Config(db: AppDb) : BaseConfig(db) {
         if (dataVersion < DATA_VERSION || hash == "")
             // migrate old data version OR freshly installed app (or updated from 3.x)
             ConfigMigration(app, this)
+        repairWidgetBindings()
+    }
+
+    /**
+     * Re-points every widget left bound to a profile id nothing holds - the damage phase 66's
+     * [unbindWidgets] prevents from here on but cannot undo.
+     *
+     * **This is prophylactic, not curative, and the distinction is the whole design.** By the time
+     * an id has been reused there is nothing to detect: the stored entry is byte-identical whether
+     * it was configured for the child who holds that id now or for the one who held it before, and
+     * neither side records a time. What this catches is the window before that - a removal on an
+     * older build with no new child added since - where the widget already renders "profile does
+     * not exist" and would start rendering the next child the moment one appears, because
+     * `LoginViewModel` mints `ProfileDao.lastId + 1` and that is a MAX over the survivors.
+     *
+     * **`> 0` is the whole of the sentinel safety.** One comparison excludes `-1`, which the
+     * timetable widget reads as "all profiles" and every notifications widget stores, and `-2`,
+     * which an entry phase 66 already re-pointed holds. Re-pointing a `-1` entry would turn a
+     * one-child timetable widget into an all-children one, which shows the new child - finding AA,
+     * recreated by its own fix. An entry with no `profileId` answers `null` from [boundProfileId]
+     * and is dropped before the comparison; Gson reads an absent key as `-1`, so it is unified too.
+     *
+     * The profile table is read **only** when some entry names an id, through
+     * [eu.mikus.edziennik.data.db.dao.ProfileDao.idsNow] - ids, not rows, so this learns that an id
+     * exists and nothing else about a profile. `idsNow` and not `idsForSyncNow`: the latter filters
+     * `archived = 0`, and an archived profile keeps a positive id and still renders, because
+     * `getByIdNow` - what both providers call - does not filter it either.
+     *
+     * It calls [unbindWidgets] rather than re-implementing it, which is what keeps the raw
+     * `JsonObject` mutation and the write-back through the delegate setter in one place. One pass
+     * per orphaned id; that count is 0 or 1 on essentially every device.
+     */
+    private fun repairWidgetBindings() {
+        val bound = widgetConfigs.entrySet()
+            .mapNotNull { (_, element) -> (element as? JsonObject)?.boundProfileId() }
+            .filter { it > 0 }
+            .toSortedSet()
+        if (bound.isEmpty())
+            return
+        bound.removeAll(db.profileDao().idsNow.toSet())
+        bound.forEach(::unbindWidgets)
     }
 
     /**
