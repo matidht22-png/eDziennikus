@@ -360,4 +360,63 @@ class ConfigWidgetRepairTest {
         assertEquals(listOf("widgetConfigs", "widgetBindingsRepaired"), seen)
         collector.cancel()
     }
+
+    /**
+     * Review Focus 1. `Config.migrate` is the first statement in `App.onCreate`'s background block;
+     * `SSLProviderInstaller.install`, `SyncWorker.scheduleNext` and `UpdateWorker.scheduleNext` all
+     * follow it inside the same `withContext`, and `App`'s scope is a bare `Job()` with no
+     * `CoroutineExceptionHandler`. So a throw here does not merely crash - it crashes at launch,
+     * every launch, and silently stops sync ever being scheduled, with no way for the user to reach
+     * LAB and undo the edit that caused it.
+     *
+     * A malformed blob is the shape Task 1's `boundProfileId` cannot reach: `ConfigDelegate`
+     * deserialises `JsonObject` with `toJsonObject()`, which answers null on a parse failure, into a
+     * property typed non-null, so reading `widgetConfigs` throws before any entry is examined.
+     */
+    @Test
+    fun `a corrupted widget blob does not take the migration down`() {
+        val blob = """{"10":{"profileId":"""
+        val config = configWith(blob, 1)
+
+        config.migrate(app)
+
+        // Reached at all only because nothing escaped `migrate` - which is the containment. The
+        // assertion is that the row came back untouched: a contained failure must leave the blob
+        // exactly as stored, not half-rewritten by a sweep that got part way through it.
+        assertEquals(blob, configDao.rows[-1 to "widgetConfigs"])
+    }
+
+    /**
+     * A repair that failed has not run, so it must not be recorded as having run. Recording it would
+     * mean a device whose blob is repaired by hand later, or restored, never gets swept at all.
+     *
+     * Reconfiguring a widget is not that path for this shape: `WidgetConfigActivity` reads
+     * `getWidgetConfigs()`, which is the same null the repair just hit, and calls `configs.add` on
+     * it, so placing a widget on such a device throws rather than heals anything.
+     */
+    @Test
+    fun `a failed repair is not recorded so it retries`() {
+        val config = configWith("""{"10":{"profileId":""", 1)
+
+        config.migrate(app)
+
+        assertFalse(config.widgetBindingsRepaired)
+    }
+
+    /**
+     * The catch has to be broad, and nothing above pins that. Both tests above fail through the
+     * NPE a malformed blob produces, so narrowing the catch to `NullPointerException` leaves them
+     * green while re-opening the case this task exists to close: `idsNow` is a Room query, and a
+     * SQLite failure in it would propagate out of `migrate` and take `SSLProviderInstaller` and
+     * both `scheduleNext` calls down with it.
+     */
+    @Test
+    fun `a database failure during the repair is contained too`() {
+        val config = configWith("""{"10":{"profileId":2}}""", 1)
+        every { profileDao.idsNow } throws RuntimeException("database is locked")
+
+        config.migrate(app)
+
+        assertFalse(config.widgetBindingsRepaired)
+    }
 }

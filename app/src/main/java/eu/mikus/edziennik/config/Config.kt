@@ -13,12 +13,14 @@ import eu.mikus.edziennik.data.api.models.PendingUserAction
 import eu.mikus.edziennik.data.api.models.Update
 import eu.mikus.edziennik.data.db.AppDb
 import eu.mikus.edziennik.ui.widgets.WidgetConfig
+import eu.mikus.edziennik.utils.Utils
 import java.util.concurrent.ConcurrentHashMap
 
 @Suppress("RemoveExplicitTypeArguments")
 class Config(db: AppDb) : BaseConfig(db) {
     companion object {
         const val DATA_VERSION = 12
+        private const val TAG = "Config"
     }
 
     /**
@@ -95,14 +97,36 @@ class Config(db: AppDb) : BaseConfig(db) {
      * The flag is set after the call, not before it, so a failure leaves the repair to retry on the
      * next launch rather than recording a sweep that did not happen. The repair is idempotent, so a
      * retry costs nothing.
+     *
+     * The repair is wrapped because it is **optional work sitting above work that is not**. This
+     * method is the first statement in `App.onCreate`'s background block, and
+     * `SSLProviderInstaller.install`, `checkDevModePassword` and both `scheduleNext` calls
+     * follow it inside the same `withContext`; `App`'s scope is a bare `Job()` with no
+     * `CoroutineExceptionHandler`. So a throw here crashes at launch, every launch, and silently
+     * stops sync ever being scheduled - and the user cannot open LAB to undo whatever caused it.
+     * [repairWidgetBindings] failing costs one stale widget binding; letting it propagate costs the
+     * app.
+     *
+     * The catch does not swallow a failure into silence: the flag stays unset, so the repair is
+     * retried on the next launch, and it is logged through `Utils.d` - which is gated on `devMode`,
+     * so on a normal release build the unset flag is the only trace. The one shape that can still
+     * reach it is a `widgetConfigs` row holding malformed JSON, which [ConfigDelegate] deserialises
+     * to `null` into a non-null-typed property - a defect of that contract, shared by every
+     * `config<JsonObject>` property, and not fixed here.
      */
     fun migrate(app: App) {
         if (dataVersion < DATA_VERSION || hash == "")
             // migrate old data version OR freshly installed app (or updated from 3.x)
             ConfigMigration(app, this)
         if (!widgetBindingsRepaired) {
-            repairWidgetBindings()
-            widgetBindingsRepaired = true
+            try {
+                repairWidgetBindings()
+                widgetBindingsRepaired = true
+            }
+            catch (e: Exception) {
+                // the repair is optional work; everything App.onCreate has left to do is not
+                Utils.d(TAG, "widget binding repair failed, retrying next launch: $e")
+            }
         }
     }
 
@@ -255,19 +279,29 @@ class Config(db: AppDb) : BaseConfig(db) {
      * `ProfileRemoveDialog`, so in practice the crash dominates; this records the cost, it does
      * not close it.
      *
-     * **This is the first mutation of [widgetConfigs] that is not on the main thread, and it takes
-     * no lock.** `ProfileRemoveDialog` calls [removeProfile] inside
-     * `withContext(Dispatchers.Default)`, while the three widget providers read this same
-     * [JsonObject] instance on the main thread and their `onDeleted` removes from it there. A
-     * widget broadcast landing inside the loop can race it: `onDeleted`'s `remove` against this
+     * **This mutates [widgetConfigs] off the main thread, from two callers, and takes no lock.**
+     * `ProfileRemoveDialog` calls [removeProfile] inside `withContext(Dispatchers.Default)`, and
+     * [repairWidgetBindings] reaches here from [migrate], which `App.onCreate` runs inside the same
+     * dispatcher at process start - when a widget broadcast is especially likely to land, since a
+     * broadcast is often what started the process. Meanwhile the three widget providers read this
+     * same [JsonObject] instance on the main thread and their `onDeleted` removes from it there,
+     * as does `WidgetConfigActivity`, whose OK tap adds to it when a widget is placed. A widget
+     * deleted or placed inside the loop can race it: a `remove` or an `add` against this
      * `entrySet()` iteration, or against the `toString()` the delegate setter then runs over the
-     * whole object, makes either throw `ConcurrentModificationException` out of [removeProfile].
+     * whole object, makes either throw `ConcurrentModificationException`. The repair is exposed one
+     * step earlier than the removal is: [repairWidgetBindings] iterates the same `entrySet()`
+     * itself before it calls here, so on any device with a widget it can throw even when nothing
+     * turns out to be orphaned. Where the throw goes differs by caller: out of [removeProfile] it
+     * propagates, and out of the repair [migrate] catches it, leaves [widgetBindingsRepaired] unset
+     * and lets the next launch retry.
      * The `addProperty` itself is not part of that: it only ever reaches an entry whose `profileId`
      * is already present, so it replaces a value rather than inserting a key, which
      * `LinkedTreeMap` does not count as a structural change - a provider reading that child sees
-     * either id and does not throw. The window is microseconds and the trigger is a widget update
-     * arriving during the removal tap, so it is accepted rather than closed; closing it would take
-     * a lock shared with the providers, not one here.
+     * either id and does not throw. The window is microseconds and the trigger is a widget being
+     * deleted or placed at that same moment, whether during the removal tap or during the first
+     * moments of the process - placing one needs user input, so that half is practically
+     * unreachable - so it is accepted rather than closed; closing it would take a lock shared with
+     * the providers, not one here.
      */
     private fun unbindWidgets(profileId: Int) {
         val configs = widgetConfigs
