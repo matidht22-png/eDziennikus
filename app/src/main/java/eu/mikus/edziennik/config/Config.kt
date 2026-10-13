@@ -5,13 +5,13 @@
 package eu.mikus.edziennik.config
 
 import com.google.gson.JsonObject
+import com.google.gson.JsonPrimitive
 import eu.mikus.edziennik.App
 import eu.mikus.edziennik.BuildConfig
 import eu.mikus.edziennik.config.utils.*
 import eu.mikus.edziennik.data.api.models.PendingUserAction
 import eu.mikus.edziennik.data.api.models.Update
 import eu.mikus.edziennik.data.db.AppDb
-import eu.mikus.edziennik.ext.getInt
 import eu.mikus.edziennik.ui.widgets.WidgetConfig
 import java.util.concurrent.ConcurrentHashMap
 
@@ -131,6 +131,26 @@ class Config(db: AppDb) : BaseConfig(db) {
     }
 
     /**
+     * The `profileId` this entry names, or `null` when it names none that can be compared.
+     *
+     * `null` covers three shapes that must all be left alone rather than treated as a match: the
+     * key absent (Gson reads that as `-1`, so the entry is a unified widget), the value a JSON
+     * object or array, and the value a primitive that is neither a number nor a string that parses
+     * as one. The last one is why this exists instead of [eu.mikus.edziennik.ext.getInt], which
+     * checks `isJsonPrimitive` and then calls `asInt` - a boolean, or a string that does not
+     * parse, passes that check and `Integer.parseInt` throws. A numeric string such as `"2"` does
+     * parse, and answers 2 exactly as `getInt` did: Gson's reader accepts a string token for an
+     * `Int` field, so the providers resolve that widget as profile 2 and it must not be skipped.
+     * The blob is hand-editable from LAB, and both callers run somewhere a throw is expensive:
+     * inside `withContext(Dispatchers.Default)` on the profile-removal path, and inside [migrate]
+     * at startup, above everything else `App.onCreate` has left to do.
+     */
+    private fun JsonObject.boundProfileId(): Int? =
+        (get("profileId") as? JsonPrimitive)?.let {
+            if (it.isNumber) it.asInt else it.asString.toIntOrNull()
+        }
+
+    /**
      * Points every widget bound to [profileId] at [WidgetConfig.PROFILE_REMOVED], so it stops
      * resolving to a profile at all.
      *
@@ -152,8 +172,10 @@ class Config(db: AppDb) : BaseConfig(db) {
      * are left untouched, which is also what keeps `-1` - all profiles, and every notifications
      * widget - out of this. A member whose value is not an object (a string, a `null`) is skipped
      * rather than cast: the `as` is this function's own, and a `ClassCastException` here would take
-     * the removal down. Other shapes a hand-edit in LAB could leave behind, such as a non-numeric
-     * `profileId`, are not guarded.
+     * the removal down. The `profileId` read is guarded by [boundProfileId], which answers `null`
+     * for every shape that does not name an id - so a hand-edited `"profileId": "two"` is skipped
+     * rather than throwing out of this loop, while `"profileId": "2"` still reads as 2 and is
+     * re-pointed.
      *
      * Runs last in [removeProfile] on purpose: if anything above it throws, the widgets stay bound
      * to a profile whose row has not been deleted yet, and the retry unbinds them. Unbinding first
@@ -187,7 +209,7 @@ class Config(db: AppDb) : BaseConfig(db) {
         var changed = false
         for ((_, element) in configs.entrySet()) {
             val widget = element as? JsonObject ?: continue
-            if (widget.getInt("profileId") != profileId)
+            if (widget.boundProfileId() != profileId)
                 continue
             widget.addProperty("profileId", WidgetConfig.PROFILE_REMOVED)
             changed = true

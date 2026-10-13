@@ -283,6 +283,38 @@ class ConfigWidgetUnbindTest {
         assertFalse(after.has("profileId"))
     }
 
+    /**
+     * The blob is hand-editable from LAB (`LabViewModel.kt:235` writes an arbitrary string into any
+     * config key), so `profileId` can hold a string or a boolean. `ext.getInt` checks
+     * `isJsonPrimitive` and then calls `asInt`, and both of those ARE primitives - Gson falls
+     * through to `Integer.parseInt(getAsString())` and throws. A throw here takes the whole removal
+     * down from inside `withContext(Dispatchers.Default)`, and from phase 67 onwards the same loop
+     * runs inside `Config.migrate`, where it would take app startup down with it.
+     *
+     * A numeric string is the exception: `getAsInt` parses it without throwing and the providers
+     * resolve it as that profile, so entry 19 must still be re-pointed rather than skipped.
+     */
+    @Test
+    fun `a profileId that is not a number is skipped, and a numeric string still names a profile`() {
+        val fresh = configWith(
+            """{"10":{"profileId":2},"17":{"profileId":"two"},"18":{"profileId":true},""" +
+                """"19":{"profileId":"2"}}"""
+        )
+
+        fresh.removeProfile(2)
+
+        assertEquals(
+            WidgetConfig.PROFILE_REMOVED,
+            fresh.widgetConfigs.getJsonObject("10").getInt("profileId"),
+        )
+        assertEquals(
+            WidgetConfig.PROFILE_REMOVED,
+            fresh.widgetConfigs.getJsonObject("19").getInt("profileId"),
+        )
+        assertEquals("two", fresh.widgetConfigs.getJsonObject("17")?.get("profileId")?.asString)
+        assertEquals(true, fresh.widgetConfigs.getJsonObject("18")?.get("profileId")?.asBoolean)
+    }
+
     /** The common case: most devices have no widgets, and a removal must not create a row. */
     @Test
     fun `a removal on a device with no widgets creates no row`() {
