@@ -58,22 +58,17 @@ class WidgetLuckyNumberProvider : AppWidgetProvider() {
             val luckyNumber = app.db.luckyNumberDao().getNearestFutureNow(config.profileId, today)
             val isYours = luckyNumber?.number == profile?.studentNumber
 
-            var noNumberText = false
+            val text = luckyNumberText(
+                profile?.name,
+                luckyNumber?.number,
+                app.getString(R.string.widget_lucky_number_no_profile),
+            )
+            val noNumberText = text.number == null
 
-            if (profile != null) {
-                views.setTextViewText(R.id.widgetLuckyNumberProfileRight, profile.name)
-                views.setTextViewText(R.id.widgetLuckyNumberProfileBottom, profile.name)
-            }
-
-            if (profile == null || luckyNumber == null || luckyNumber.number == -1) {
-                noNumberText = true
-                views.setTextViewText(R.id.widgetLuckyNumberTextRight, null)
-                views.setTextViewText(R.id.widgetLuckyNumberTextBottom, null)
-            }
-            else {
-                views.setTextViewText(R.id.widgetLuckyNumberTextRight, luckyNumber.number.toString())
-                views.setTextViewText(R.id.widgetLuckyNumberTextBottom, luckyNumber.number.toString())
-            }
+            views.setTextViewText(R.id.widgetLuckyNumberProfileRight, text.profileLine)
+            views.setTextViewText(R.id.widgetLuckyNumberProfileBottom, text.profileLine)
+            views.setTextViewText(R.id.widgetLuckyNumberTextRight, text.number)
+            views.setTextViewText(R.id.widgetLuckyNumberTextBottom, text.number)
 
             val drawableRes = when {
                 luckyNumber == null || luckyNumber.number == -1 -> R.drawable.emoji_sad
