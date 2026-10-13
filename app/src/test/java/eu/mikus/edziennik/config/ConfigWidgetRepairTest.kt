@@ -309,4 +309,55 @@ class ConfigWidgetRepairTest {
         assertEquals(0.4f, entry.getFloat("alpha"))
         assertEquals(0.6f, entry.getFloat("opacity"))
     }
+
+    /**
+     * The damage class is closed: `profileDao().remove` has exactly one caller, and
+     * `config.removeProfile` - which unbinds - runs above it, so no new stale entry can be created.
+     * A sweep that kept running would have nothing left to find, while carrying its false-positive
+     * exposure on every launch forever.
+     *
+     * The second half is what makes this falsifiable. Hand-writing the entry back to an orphaned id
+     * recreates exactly the state the first `migrate` repaired; a repair that still runs would
+     * repair it again, and a test that stopped after the first assertion could not tell.
+     */
+    @Test
+    fun `the repair runs once and never again`() {
+        val config = configWith("""{"10":{"profileId":2}}""", 1)
+
+        config.migrate(app)
+        assertEquals(WidgetConfig.PROFILE_REMOVED, config.widget("10").getInt("profileId"))
+
+        requireNotNull(config.widget("10")).addProperty("profileId", 2)
+        config.migrate(app)
+
+        assertEquals(2, config.widget("10").getInt("profileId"))
+    }
+
+    /**
+     * Review Focus 5. A flag kept only in a plain in-memory field would make the repair re-run on
+     * every launch forever, and `the repair runs once and never again` above cannot see that: both
+     * calls are in one process, so a field satisfies it. A raw write into `BaseConfig.values` is
+     * not that case - `ConfigDelegate` caches after its first read, so the write never reaches the
+     * second `migrate` and both tests go red.
+     *
+     * The row itself is not assertable here - `BaseConfig.set` persists with
+     * `launch(Dispatchers.IO)`, which names its own dispatcher and escapes the test scheduler, so
+     * any assertion on the fake DAO would be a timing race. `Config.changes` is the deterministic
+     * half of the same write: `set` fills it with a synchronous `tryEmit` before queueing the row,
+     * so an emission means a row is on its way, and no emission means no row will ever exist.
+     */
+    @Test
+    fun `the repair records that it ran through the config store`() = runTest {
+        val config = configWith("""{"10":{"profileId":2}}""", 1)
+        val seen = mutableListOf<String>()
+        val collector = launch { config.changes.collect { seen += it } }
+        runCurrent()
+
+        config.migrate(app)
+        runCurrent()
+
+        // the order matters: the flag is set AFTER the repair, so a failure leaves it unset
+        assertEquals(listOf("widgetConfigs", "widgetBindingsRepaired"), seen)
+        collector.cancel()
+    }
 }

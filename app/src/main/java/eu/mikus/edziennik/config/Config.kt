@@ -74,12 +74,36 @@ class Config(db: AppDb) : BaseConfig(db) {
     var archiverEnabled by config<Boolean>(true)
     var runSync by config<Boolean>(false)
     var widgetConfigs by config<JsonObject> { JsonObject() }
+    var widgetBindingsRepaired by config<Boolean>(false)
 
+    /**
+     * Runs the one-shot data fixups this process owes, off the main thread - `App.onCreate` calls
+     * this inside `launch { withContext(Dispatchers.Default) { … } }`.
+     *
+     * Two gates, two one-shots. [repairWidgetBindings] is **not** inside [ConfigMigration] and is
+     * **not** gated on [dataVersion], because neither would reach the devices that need it.
+     * `config<Int>(DATA_VERSION)` makes the delegate's default the constant itself - deliberately,
+     * since `fd407b2b` - so a device that never wrote the row reads whatever the running build says
+     * and skips every ladder step. And nothing writes 12: [ConfigMigration]'s ladder tops out at
+     * 11, so a device that ran that step is permanently `11 < 12` and re-enters it on every launch.
+     * A `dataVersion` gate would therefore fire on the wrong devices and record nothing.
+     *
+     * [widgetBindingsRepaired] is a config **row**, not a column - the `config` table is
+     * `(profileId, key, value)` - so this needs no schema change, which matters because `AppDb` is
+     * `version = 1` with `fallbackToDestructiveMigration()` and no `Migration` objects.
+     *
+     * The flag is set after the call, not before it, so a failure leaves the repair to retry on the
+     * next launch rather than recording a sweep that did not happen. The repair is idempotent, so a
+     * retry costs nothing.
+     */
     fun migrate(app: App) {
         if (dataVersion < DATA_VERSION || hash == "")
             // migrate old data version OR freshly installed app (or updated from 3.x)
             ConfigMigration(app, this)
-        repairWidgetBindings()
+        if (!widgetBindingsRepaired) {
+            repairWidgetBindings()
+            widgetBindingsRepaired = true
+        }
     }
 
     /**
