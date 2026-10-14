@@ -34,15 +34,6 @@ fun JsonObject?.getChar(key: String, defaultValue: Char): Char = get(key)?.let {
 fun JsonObject?.getJsonObject(key: String, defaultValue: JsonObject): JsonObject = get(key)?.let { if (it.isJsonObject) it.asJsonObject else defaultValue } ?: defaultValue
 fun JsonObject?.getJsonArray(key: String, defaultValue: JsonArray): JsonArray = get(key)?.let { if (it.isJsonArray) it.asJsonArray else defaultValue } ?: defaultValue
 
-fun JsonArray.getBoolean(key: Int): Boolean? = if (key >= size()) null else get(key)?.let { if (!it.isJsonPrimitive) null else it.asBoolean }
-fun JsonArray.getString(key: Int): String? = if (key >= size()) null else get(key)?.let { if (!it.isJsonPrimitive) null else it.asString }
-fun JsonArray.getInt(key: Int): Int? = if (key >= size()) null else get(key)?.let { if (!it.isJsonPrimitive) null else it.asInt }
-fun JsonArray.getLong(key: Int): Long? = if (key >= size()) null else get(key)?.let { if (!it.isJsonPrimitive) null else it.asLong }
-fun JsonArray.getFloat(key: Int): Float? = if (key >= size()) null else get(key)?.let { if(!it.isJsonPrimitive) null else it.asFloat }
-fun JsonArray.getChar(key: Int): Char? = if (key >= size()) null else get(key)?.let { if(!it.isJsonPrimitive) null else it.asString[0] }
-fun JsonArray.getJsonObject(key: Int): JsonObject? = if (key >= size()) null else get(key)?.let { if (it.isJsonObject) it.asJsonObject else null }
-fun JsonArray.getJsonArray(key: Int): JsonArray? = if (key >= size()) null else get(key)?.let { if (it.isJsonArray) it.asJsonArray else null }
-
 inline fun <reified E : Enum<E>> JsonObject?.getEnum(key: String) = this?.getInt(key)?.toEnum<E>()
 fun JsonObject.putEnum(key: String, value: Enum<*>) = addProperty(key, value.toInt())
 
