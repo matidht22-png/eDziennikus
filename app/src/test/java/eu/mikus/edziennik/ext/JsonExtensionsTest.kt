@@ -284,9 +284,9 @@ class JsonExtensionsTest {
 
     /**
      * The `bFalse` row is the one that matters: the with-default family is `… ?: defaultValue`,
-     * and `?:` fires only on null. A stored `false` must survive a `true` default. It does, before
-     * and after the type-guard change, and that is why it was safe to confirm that no
-     * `getBoolean(key, true)` call site exists rather than to go looking for one to protect.
+     * and `?:` fires only on null. A stored `false` must survive a `true` default. It does, and it
+     * has to - `LibrusApiUnits.kt:38-39` call `getBoolean("…", true)` from inside an `apply {}`
+     * block, so they are receiver-less calls that a `.getBoolean(` grep cannot see.
      */
     @Test
     fun `getBoolean with a default substitutes only where the value cannot be read`() {
@@ -330,7 +330,7 @@ class JsonExtensionsTest {
         )
     }
 
-    /** Review Focus 1 - every accessor is declared on `JsonObject?`, and nothing else tests that. */
+    /** Every accessor is declared on `JsonObject?`, and nothing else tests that. */
     @Test
     fun `a null receiver reads as null and takes the default`() {
         val nothing: JsonObject? = null
@@ -350,7 +350,7 @@ class JsonExtensionsTest {
         assertEquals('D', nothing.getChar("k", 'D'))
     }
 
-    /** Review Focus 4 - these two are not changed by this phase, and the split must not move them. */
+    /** These two are not changed by this phase, and the split must not move them. */
     @Test
     fun `getJsonObject and getJsonArray read nested nodes and reject the wrong shape`() {
         assertEquals(0, json.getJsonObject("obj")?.size())
@@ -364,7 +364,7 @@ class JsonExtensionsTest {
     }
 
     /**
-     * Review Focus 3 - the non-object sits BETWEEN two objects, so a fix that degrades to
+     * The non-object sits BETWEEN two objects, so a fix that degrades to
      * "return an empty list" fails here while still not throwing.
      */
     @Test

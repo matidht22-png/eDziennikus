@@ -285,11 +285,14 @@ class ConfigWidgetUnbindTest {
 
     /**
      * The blob is hand-editable from LAB (`LabViewModel.kt:235` writes an arbitrary string into any
-     * config key), so `profileId` can hold a string or a boolean. `ext.getInt` checks
-     * `isJsonPrimitive` and then calls `asInt`, and both of those ARE primitives - Gson falls
-     * through to `Integer.parseInt(getAsString())` and throws. A throw here takes the whole removal
-     * down from inside `withContext(Dispatchers.Default)`, and from phase 67 onwards the same loop
-     * runs inside `Config.migrate`, where it would take app startup down with it.
+     * config key), so `profileId` can hold a string or a boolean. When this test was written
+     * `ext.getInt` checked `isJsonPrimitive` and then called `asInt`, and both of those ARE
+     * primitives - Gson fell through to `Integer.parseInt(getAsString())` and threw. Phase 68 fixed
+     * `getInt` so it no longer throws; this test still pins that `boundProfileId` answers null for
+     * those shapes rather than relying on the shared accessor to do it. A throw here would take
+     * the whole removal down from inside `withContext(Dispatchers.Default)`, and from phase 67
+     * onwards the same loop runs inside `Config.migrate`, where it would take app startup down
+     * with it.
      *
      * A numeric string is the exception: `getAsInt` parses it without throwing and the providers
      * resolve it as that profile, so entry 19 must still be re-pointed rather than skipped.

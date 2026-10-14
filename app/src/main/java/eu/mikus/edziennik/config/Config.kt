@@ -225,11 +225,14 @@ class Config(db: AppDb) : BaseConfig(db) {
      * `null` covers three shapes that must all be left alone rather than treated as a match: the
      * key absent (Gson reads that as `-1`, so the entry is a unified widget), the value a JSON
      * object or array, and the value a primitive that is neither a number nor a string that parses
-     * as one. The last one is why this exists instead of [eu.mikus.edziennik.ext.getInt], which
-     * checks `isJsonPrimitive` and then calls `asInt` - a boolean, or a string that does not
-     * parse, passes that check and `Integer.parseInt` throws. A numeric string such as `"2"` does
-     * parse, and answers 2 exactly as `getInt` did: Gson's reader accepts a string token for an
-     * `Int` field, so the providers resolve that widget as profile 2 and it must not be skipped.
+     * as one. The last one is why this was written: [eu.mikus.edziennik.ext.getInt] then checked
+     * `isJsonPrimitive` and called `asInt`, so a boolean, or a string that does not parse, passed
+     * that check and `Integer.parseInt` threw. Phase 68 made `getInt` branch on the number variant
+     * first, so it now answers exactly what this does and this is a duplicate of
+     * `getInt("profileId")`. Collapsing the two is its own change and is not folded in here.
+     * A numeric string such as `"2"` does parse, and answers 2 exactly as `getInt` did: Gson's
+     * reader accepts a string token for an `Int` field, so the providers resolve that widget as
+     * profile 2 and it must not be skipped.
      * The blob is hand-editable from LAB, and both callers run somewhere a throw is expensive:
      * inside `withContext(Dispatchers.Default)` on the profile-removal path, and inside [migrate]
      * at startup, above everything else `App.onCreate` has left to do.
