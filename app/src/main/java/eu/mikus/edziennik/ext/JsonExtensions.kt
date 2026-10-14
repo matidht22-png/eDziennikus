@@ -16,21 +16,43 @@ import kotlin.contracts.contract
 
 fun JsonObject?.get(key: String): JsonElement? = this?.get(key)
 
-fun JsonObject?.getBoolean(key: String): Boolean? = get(key)?.let { if (!it.isJsonPrimitive) null else it.asBoolean }
-fun JsonObject?.getString(key: String): String? = get(key)?.let { if (!it.isJsonPrimitive) null else it.asString }
-fun JsonObject?.getInt(key: String): Int? = get(key)?.let { if (!it.isJsonPrimitive) null else it.asInt }
-fun JsonObject?.getLong(key: String): Long? = get(key)?.let { if (!it.isJsonPrimitive) null else it.asLong }
-fun JsonObject?.getFloat(key: String): Float? = get(key)?.let { if(!it.isJsonPrimitive) null else it.asFloat }
-fun JsonObject?.getChar(key: String): Char? = get(key)?.let { if(!it.isJsonPrimitive) null else it.asString[0] }
+/*
+ * `isJsonPrimitive` is not a type check - a JSON string is a primitive too, so it only ever
+ * excluded objects, arrays and JSON null. These narrow to the primitive's actual variant first.
+ *
+ * `asInt`/`asLong`/`asFloat` are reached only under `isNumber`. Gson's own fallback for the other
+ * case is `Integer.parseInt(getAsString())`, which is an implementation detail rather than a
+ * documented contract; going through Kotlin's `toIntOrNull` instead keeps this file's behaviour
+ * ours. A quoted integer still coerces, which `Config.boundProfileId` depends on.
+ */
+private fun JsonElement.asBooleanOrNull(): Boolean? = (this as? JsonPrimitive)?.asBoolean
+private fun JsonElement.asStringOrNull(): String? = (this as? JsonPrimitive)?.asString
+private fun JsonElement.asIntOrNull(): Int? = (this as? JsonPrimitive)?.let {
+    if (it.isNumber) it.asInt else it.asString.toIntOrNull()
+}
+private fun JsonElement.asLongOrNull(): Long? = (this as? JsonPrimitive)?.let {
+    if (it.isNumber) it.asLong else it.asString.toLongOrNull()
+}
+private fun JsonElement.asFloatOrNull(): Float? = (this as? JsonPrimitive)?.let {
+    if (it.isNumber) it.asFloat else it.asString.toFloatOrNull()
+}
+private fun JsonElement.asCharOrNull(): Char? = (this as? JsonPrimitive)?.asString?.firstOrNull()
+
+fun JsonObject?.getBoolean(key: String): Boolean? = get(key)?.asBooleanOrNull()
+fun JsonObject?.getString(key: String): String? = get(key)?.asStringOrNull()
+fun JsonObject?.getInt(key: String): Int? = get(key)?.asIntOrNull()
+fun JsonObject?.getLong(key: String): Long? = get(key)?.asLongOrNull()
+fun JsonObject?.getFloat(key: String): Float? = get(key)?.asFloatOrNull()
+fun JsonObject?.getChar(key: String): Char? = get(key)?.asCharOrNull()
 fun JsonObject?.getJsonObject(key: String): JsonObject? = get(key)?.let { if (it.isJsonObject) it.asJsonObject else null }
 fun JsonObject?.getJsonArray(key: String): JsonArray? = get(key)?.let { if (it.isJsonArray) it.asJsonArray else null }
 
-fun JsonObject?.getBoolean(key: String, defaultValue: Boolean): Boolean = get(key)?.let { if (!it.isJsonPrimitive) defaultValue else it.asBoolean } ?: defaultValue
-fun JsonObject?.getString(key: String, defaultValue: String): String = get(key)?.let { if (!it.isJsonPrimitive) defaultValue else it.asString } ?: defaultValue
-fun JsonObject?.getInt(key: String, defaultValue: Int): Int = get(key)?.let { if (!it.isJsonPrimitive) defaultValue else it.asInt } ?: defaultValue
-fun JsonObject?.getLong(key: String, defaultValue: Long): Long = get(key)?.let { if (!it.isJsonPrimitive) defaultValue else it.asLong } ?: defaultValue
-fun JsonObject?.getFloat(key: String, defaultValue: Float): Float = get(key)?.let { if(!it.isJsonPrimitive) defaultValue else it.asFloat } ?: defaultValue
-fun JsonObject?.getChar(key: String, defaultValue: Char): Char = get(key)?.let { if(!it.isJsonPrimitive) defaultValue else it.asString[0] } ?: defaultValue
+fun JsonObject?.getBoolean(key: String, defaultValue: Boolean): Boolean = get(key)?.asBooleanOrNull() ?: defaultValue
+fun JsonObject?.getString(key: String, defaultValue: String): String = get(key)?.asStringOrNull() ?: defaultValue
+fun JsonObject?.getInt(key: String, defaultValue: Int): Int = get(key)?.asIntOrNull() ?: defaultValue
+fun JsonObject?.getLong(key: String, defaultValue: Long): Long = get(key)?.asLongOrNull() ?: defaultValue
+fun JsonObject?.getFloat(key: String, defaultValue: Float): Float = get(key)?.asFloatOrNull() ?: defaultValue
+fun JsonObject?.getChar(key: String, defaultValue: Char): Char = get(key)?.asCharOrNull() ?: defaultValue
 fun JsonObject?.getJsonObject(key: String, defaultValue: JsonObject): JsonObject = get(key)?.let { if (it.isJsonObject) it.asJsonObject else defaultValue } ?: defaultValue
 fun JsonObject?.getJsonArray(key: String, defaultValue: JsonArray): JsonArray = get(key)?.let { if (it.isJsonArray) it.asJsonArray else defaultValue } ?: defaultValue
 
