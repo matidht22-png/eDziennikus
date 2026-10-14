@@ -363,6 +363,27 @@ class JsonExtensionsTest {
         assertNull(json.getJsonObject("absent"))
     }
 
+    /**
+     * Review Focus 3 - the non-object sits BETWEEN two objects, so a fix that degrades to
+     * "return an empty list" fails here while still not throwing.
+     */
+    @Test
+    fun `asJsonObjectList keeps the objects, in order, and skips everything else`() {
+        val arr = JsonParser.parseString("""[{"a":1}, 5, null, "s", [], {"a":2}]""").asJsonArray
+        assertEquals(listOf(1, 2), arr.asJsonObjectList().map { it.getInt("a") })
+    }
+
+    @Test
+    fun `asJsonObjectList on an array of objects is unchanged`() {
+        val arr = JsonParser.parseString("""[{"a":1},{"a":2},{"a":3}]""").asJsonArray
+        assertEquals(listOf(1, 2, 3), arr.asJsonObjectList().map { it.getInt("a") })
+    }
+
+    @Test
+    fun `asJsonObjectList on an empty array is empty`() {
+        assertEquals(emptyList<JsonObject>(), JsonParser.parseString("[]").asJsonArray.asJsonObjectList())
+    }
+
     companion object {
         private val KEYS = listOf(
             "int", "dec", "bigNum", "hugeFloat",

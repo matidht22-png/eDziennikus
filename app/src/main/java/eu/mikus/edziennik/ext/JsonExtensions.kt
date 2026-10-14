@@ -18,7 +18,8 @@ fun JsonObject?.get(key: String): JsonElement? = this?.get(key)
 
 /*
  * `isJsonPrimitive` is not a type check - a JSON string is a primitive too, so it only ever
- * excluded objects, arrays and JSON null. These narrow to the primitive's actual variant first.
+ * excluded objects, arrays and JSON null. These narrow to JsonPrimitive first, and the numeric
+ * three branch on the number variant as well.
  *
  * `asInt`/`asLong`/`asFloat` are reached only under `isNumber`. Gson's own fallback for the other
  * case is `Integer.parseInt(getAsString())`, which is an implementation detail rather than a
@@ -73,7 +74,7 @@ operator fun JsonObject.set(key: String, value: String?) = this.addProperty(key,
 operator fun JsonObject.set(key: String, value: Number) = this.addProperty(key, value)
 operator fun JsonObject.set(key: String, value: Char) = this.addProperty(key, value)
 
-fun JsonArray.asJsonObjectList() = this.mapNotNull { it.asJsonObject }
+fun JsonArray.asJsonObjectList() = this.mapNotNull { it as? JsonObject }
 
 fun JsonObject(vararg properties: Pair<String, Any?>): JsonObject {
     return JsonObject().apply {
