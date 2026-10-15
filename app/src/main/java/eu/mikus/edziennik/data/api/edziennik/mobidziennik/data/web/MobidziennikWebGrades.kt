@@ -103,6 +103,9 @@ class MobidziennikWebGrades(override val data: DataMobidziennik,
                         // "Liczona do średniej: tak/nie" — add every grade, but only
                         // non-counting ones ("nie") get the NLDŚR description prefix.
                         val countToAvg = Regexes.MOBIDZIENNIK_GRADES_COUNT_TO_AVG.find(html)?.let { it[1] }
+                        val gradeWeight = Regexes.MOBIDZIENNIK_GRADES_WEIGHT.find(html)?.let {
+                            it[1].toFloatOrNull() ?: 0f
+                        } ?: 0f
                         if (countToAvg != null) {
                             Regexes.MOBIDZIENNIK_GRADES_DETAILS.find(html)?.let { match ->
                                 val gradeName = match[1]
@@ -125,7 +128,7 @@ class MobidziennikWebGrades(override val data: DataMobidziennik,
                                         name = gradeName,
                                         type = TYPE_NORMAL,
                                         value = gradeValue,
-                                        weight = 0f,
+                                        weight = gradeWeight,
                                         color = gradeColor,
                                         category = gradeCategory,
                                         description = description,
