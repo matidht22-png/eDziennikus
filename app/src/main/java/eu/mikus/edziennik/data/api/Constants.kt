@@ -51,3 +51,5 @@ const val LIBRUS_SANDBOX_URL = "https://sandbox.librus.pl/index.php?action="
 
 const val LIBRUS_SYNERGIA_HOMEWORK_ATTACHMENT_URL = "https://synergia.librus.pl/homework/downloadFile"
 const val LIBRUS_SYNERGIA_MESSAGES_ATTACHMENT_URL = "https://synergia.librus.pl/wiadomosci/pobierz_zalacznik"
+
+val MOBIDZIENNIK_USER_AGENT = SYSTEM_USER_AGENT

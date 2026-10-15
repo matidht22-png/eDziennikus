@@ -81,6 +81,7 @@ class ProfileArchiver(val app: App, val profile: Profile) {
                 profile.studentData.remove("enablePointGrades")
                 profile.studentData.remove("enableDescriptiveGrades")
             }
+            LoginType.MOBIDZIENNIK -> {}
             LoginType.DEMO -> {}
         }
 

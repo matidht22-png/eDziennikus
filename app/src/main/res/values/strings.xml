@@ -1510,4 +1510,14 @@
     <string name="home_card_no_grades">Brak ocen</string>
     <string name="home_card_no_notes">Brak notatek</string>
     <string name="home_configure_cards">Skonfiguruj karty</string>
+    <string name="login_type_mobidziennik" translatable="false">MobiDziennik</string>
+    <string name="login_mode_mobidziennik_web">Zaloguj nazwą serwera, loginem i hasłem</string>
+    <string name="login_mode_mobidziennik_web_hint">Podaj dane, których używasz na stronie e-dziennika</string>
+    <string name="login_mode_mobidziennik_web_guide">Podaj dane, których używasz do logowania na stronie MobiDziennika. Jako adres serwera możesz wpisać adres strony internetowej, na której masz MobiDziennik.</string>
+    <string name="login_mobidziennik_server_prefix" translatable="false">https://</string>
+    <string name="login_mobidziennik_server_suffix" translatable="false">.mobidziennik.pl/</string>
+    <string name="edziennik_progress_login_mobidziennik_api">Logowanie do API MobiDziennika…</string>
+    <string name="edziennik_progress_login_mobidziennik_api2">Logowanie do API MobiDziennika…</string>
+    <string name="edziennik_progress_login_mobidziennik_web">Logowanie do MobiDziennika…</string>
+    <string name="edziennik_progress_endpoint_push_config">Pobieranie konfiguracji push…</string>
 </resources>

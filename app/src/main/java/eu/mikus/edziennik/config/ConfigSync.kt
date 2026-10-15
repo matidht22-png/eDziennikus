@@ -17,6 +17,8 @@ class ConfigSync(base: Config) {
     var dontShowAppManagerDialog by base.config<Boolean>(false)
     var lastAppSync by base.config<Long>(0L)
     var notifyAboutUpdates by base.config<Boolean>(true)
+    var tokenMobidziennikList by base.config<List<Int>>("tokenMobidziennikList", listOf())
+    var tokenMobidziennik by base.config<String?>("tokenMobidziennik", null)
 
     // Quiet Hours
     var quietHoursEnabled by base.config<Boolean>(false)

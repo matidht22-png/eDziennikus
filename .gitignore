@@ -275,3 +275,4 @@ app/keystore.jks
 # Python bytecode from tools/
 __pycache__/
 *.pyc
+.kotlin
